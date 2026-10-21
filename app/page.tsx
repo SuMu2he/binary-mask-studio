@@ -394,18 +394,18 @@ function regionToText(pixels: Uint8Array, canvasWidth: number, region: Selection
 function parseMatrixText(text: string, allowTransparent: boolean) {
   const cleaned = text.trim().replace(/^\s*\[/, '').replace(/\]\s*$/, '');
   const lines = cleaned.split(/[;\r\n]+/).map((line) => line.trim()).filter(Boolean);
-  if (!lines.length) throw new Error('没有检测到矩阵内容。');
+  if (!lines.length) throw new Error('No matrix data found.');
   const rows = lines.map((line, rowIndex) => {
     const compact = line.replace(/[\s,]/g, '');
     const compactPattern = allowTransparent ? /^[01.·]+$/ : /^[01]+$/;
     const values = compactPattern.test(compact) ? compact.split('') : line.split(/[\s,]+/).filter(Boolean);
     const valid = values.every((value) => value === '0' || value === '1' || (allowTransparent && (value === '.' || value === '·')));
-    if (!values.length || !valid) throw new Error(`第 ${rowIndex + 1} 行包含不支持的内容。`);
+    if (!values.length || !valid) throw new Error(`Row ${rowIndex + 1} contains unsupported content.`);
     return values.map((value) => value === '1' ? OPAQUE_ONE : value === '0' ? OPAQUE_ZERO : TRANSPARENT);
   });
   const matrixWidth = rows[0].length;
-  if (rows.some((row) => row.length !== matrixWidth)) throw new Error('矩阵每一行的列数必须相同。');
-  if (matrixWidth > MAX_DIMENSION || rows.length > MAX_DIMENSION) throw new Error(`矩阵不得超过 ${MAX_DIMENSION} × ${MAX_DIMENSION}。`);
+  if (rows.some((row) => row.length !== matrixWidth)) throw new Error('Every matrix row must have the same number of columns.');
+  if (matrixWidth > MAX_DIMENSION || rows.length > MAX_DIMENSION) throw new Error(`The matrix must not exceed ${MAX_DIMENSION} × ${MAX_DIMENSION}.`);
   return rows;
 }
 
@@ -570,7 +570,7 @@ function FieldSuffix({ children }: { children: React.ReactNode }) { return <span
 export default function Home() {
   const initialLayerRef = useRef<Layer | null>(null);
   if (!initialLayerRef.current) {
-    const layer = createLayer(DEFAULT_WIDTH, DEFAULT_HEIGHT, '图层 1');
+    const layer = createLayer(DEFAULT_WIDTH, DEFAULT_HEIGHT, 'Layer 1');
     initialLayerRef.current = layer;
   }
   const layersRef = useRef<Layer[]>([initialLayerRef.current]);
@@ -622,7 +622,7 @@ export default function Home() {
   const [triangleHeight, setTriangleHeight] = useState((DEFAULT_SHAPE_SIZE * Math.sqrt(3)) / 2);
   const [triangleProjection, setTriangleProjection] = useState(DEFAULT_SHAPE_SIZE / 2);
   const [equilateral, setEquilateral] = useState(true);
-  const [textContent, setTextContent] = useState('忽闻海上有仙山 山在虚无缥缈间');
+  const [textContent, setTextContent] = useState('Binary Mask Studio');
   const [textFontSize, setTextFontSize] = useState(72);
   const [textFont, setTextFont] = useState<TextFont>('sans');
   const [textWeight, setTextWeight] = useState<TextWeight>('700');
@@ -669,7 +669,7 @@ export default function Home() {
   const [spacePressed, setSpacePressed] = useState(false);
   const [processing, setProcessing] = useState('');
   const [exportBaseName, setExportBaseName] = useState(`binary-mask-${DEFAULT_WIDTH}x${DEFAULT_HEIGHT}`);
-  const [toast, setToast] = useState('已载入 1920 × 1080 示例，可继续编辑或新建画布。');
+  const [toast, setToast] = useState('Ready with a blank 1920 × 1080 canvas. Start editing or create a new canvas.');
 
   const setDocumentDirty = (value: boolean) => { dirtyRef.current = value; setDirty(value); };
   const bumpDocument = (markDirty = true) => { setDocVersion((value) => value + 1); if (markDirty) setDocumentDirty(true); };
@@ -705,14 +705,14 @@ export default function Home() {
   const gratingCycleCount = gratingPeriodPixels > 0 ? gratingWidthPixels / gratingPeriodPixels : 0;
   const clippedRange = useMemo(() => pixelBounds(bounds, width, height), [bounds, height, width]);
   const partiallyOutside = hasParametricContent && (bounds.minX < 0 || bounds.minY < 0 || bounds.maxX > width || bounds.maxY > height);
-  const displayBounds = !hasParametricContent ? (shape === 'text' ? '请输入文字' : '参数无效') : clippedRange.hasIntersection ? `X ${clippedRange.minX}～${clippedRange.maxX} · Y ${clippedRange.minY}～${clippedRange.maxY}` : '与画布无交集';
-  const parametricLabel = shape === 'text' ? '文字' : shape === 'grating' ? '光栅' : '图形';
-  const parametricHint = !hasParametricContent ? (shape === 'text' ? '文字内容不能为空' : '宽度、高度和周期必须大于 0')
-    : !clippedRange.hasIntersection ? `${parametricLabel}完全位于画布外`
-      : shape === 'grating' ? `${partiallyOutside ? '超出部分将在应用时自动剪切 · ' : ''}周期 ${gratingPeriodPixels.toFixed(2)} px · 约 ${gratingCycleCount.toFixed(2)} 个周期${gratingAliased ? ' · 周期低于 2 px，可能混叠' : ''}`
-        : partiallyOutside ? '超出部分将在应用时自动剪切'
-          : shape === 'text' ? `字号 ${textFontSizePixels.toFixed(2)} px · 字距 ${textLetterSpacingPixels.toFixed(2)} px`
-            : `像素尺寸约 ${sizeX.toFixed(2)} × ${sizeY.toFixed(2)} px`;
+  const displayBounds = !hasParametricContent ? (shape === 'text' ? 'Enter text' : 'Invalid parameters') : clippedRange.hasIntersection ? `X ${clippedRange.minX}–${clippedRange.maxX} · Y ${clippedRange.minY}–${clippedRange.maxY}` : 'No intersection with the canvas';
+  const parametricLabel = shape === 'text' ? 'Text' : shape === 'grating' ? 'Grating' : 'Shape';
+  const parametricHint = !hasParametricContent ? (shape === 'text' ? 'Text cannot be empty' : 'Width, height, and period must be greater than 0')
+    : !clippedRange.hasIntersection ? `${parametricLabel} is entirely outside the canvas`
+      : shape === 'grating' ? `${partiallyOutside ? 'Out-of-bounds areas will be clipped when applied · ' : ''}Period ${gratingPeriodPixels.toFixed(2)} px · Approx. ${gratingCycleCount.toFixed(2)} cycles${gratingAliased ? ' · Period below 2 px may cause aliasing' : ''}`
+        : partiallyOutside ? 'Out-of-bounds areas will be clipped when applied'
+          : shape === 'text' ? `Font size ${textFontSizePixels.toFixed(2)} px · Letter spacing ${textLetterSpacingPixels.toFixed(2)} px`
+            : `Approx. pixel size ${sizeX.toFixed(2)} × ${sizeY.toFixed(2)} px`;
 
   const snapshotCurrent = (): HistorySnapshot => ({ layers: layersRef.current.map(cloneLayer), activeLayerId, selectedLayerIds: [...selectedLayerIds] });
   const snapshotBytes = (snapshot: HistorySnapshot) => snapshot.layers.reduce((sum, layer) => sum + layer.pixels.byteLength, 0);
@@ -732,7 +732,7 @@ export default function Home() {
   };
   const undo = () => { const previous = undoRef.current.pop(); if (!previous) return; redoRef.current.push(snapshotCurrent()); restoreSnapshot(previous); };
   const redo = () => { const next = redoRef.current.pop(); if (!next) return; undoRef.current.push(snapshotCurrent()); restoreSnapshot(next); };
-  const requireEditableLayer = () => { if (!activeLayer) return false; if (!activeLayer.locked) return true; setToast('当前图层已锁定，请先解锁。'); return false; };
+  const requireEditableLayer = () => { if (!activeLayer) return false; if (!activeLayer.locked) return true; setToast('The current layer is locked. Unlock it first.'); return false; };
   const resetHistory = () => { undoRef.current = []; redoRef.current = []; bumpHistory(); };
   const scheduleDocumentBump = () => {
     if (paintFrameRef.current !== null) return;
@@ -928,10 +928,10 @@ export default function Home() {
     if (!selection || !requireEditableLayer()) return;
     pushHistory();
     for (let y = selection.y; y < selection.y + selection.height; y += 1) activeLayer.pixels.fill(TRANSPARENT, y * width + selection.x, y * width + selection.x + selection.width);
-    bumpDocument(); setToast('当前图层选区已清除为透明。');
+    bumpDocument(); setToast('The selection in the current layer has been cleared to transparent.');
   };
   const beginMove = () => {
-    if (!selection) { setToast('请先创建一个矩形选区。'); return; }
+    if (!selection) { setToast('Create a rectangular selection first.'); return; }
     if (!requireEditableLayer()) return;
     const pixels = new Uint8Array(selection.width * selection.height);
     for (let y = 0; y < selection.height; y += 1) pixels.set(activeLayer.pixels.subarray((selection.y + y) * width + selection.x, (selection.y + y) * width + selection.x + selection.width), y * selection.width);
@@ -948,7 +948,7 @@ export default function Home() {
       activeLayer.pixels[y * width + x] = movePreview.pixels[sy * movePreview.width + sx];
     }
     setSelection(null);
-    setMovePreview(null); bumpDocument(); setToast('选区内容已在当前图层内移动，越界部分已剪切。');
+    setMovePreview(null); bumpDocument(); setToast('The selection has been moved within the current layer. Out-of-bounds areas were clipped.');
     return true;
   };
 
@@ -968,14 +968,14 @@ export default function Home() {
     if (!pastePreview || !requireEditableLayer()) return;
     const minX = Math.max(0, pastePreview.x); const minY = Math.max(0, pastePreview.y);
     const maxX = Math.min(width - 1, pastePreview.x + pastePreview.width - 1); const maxY = Math.min(height - 1, pastePreview.y + pastePreview.height - 1);
-    if (minX > maxX || minY > maxY) { setToast('粘贴块完全位于画布外，无法确认。'); return; }
+    if (minX > maxX || minY > maxY) { setToast('The pasted block is entirely outside the canvas and cannot be placed.'); return; }
     pushHistory();
     for (let y = minY; y <= maxY; y += 1) for (let x = minX; x <= maxX; x += 1) {
       const sourceX = x - pastePreview.x; const sourceY = y - pastePreview.y;
       activeLayer.pixels[y * width + x] = pastePreview.pixels[sourceY * pastePreview.width + sourceX];
     }
     setSelection(null);
-    setPastePreview(null); bumpDocument(); setToast('矩阵块已覆盖写入当前图层。');
+    setPastePreview(null); bumpDocument(); setToast('The matrix block has been written over the current layer.');
   };
   const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const point = pointerToPixel(event); setCursor(point);
@@ -1008,78 +1008,78 @@ export default function Home() {
   };
   const stopPointerAction = () => { panRef.current = null; drawingRef.current = false; lastPointRef.current = null; if (selectionStartRef.current && selectionDraft) setSelection(selectionDraft); selectionStartRef.current = null; setSelectionDraft(null); };
   const copySelection = () => {
-    if (!selection) { setToast('请先创建一个矩形选区。'); return; }
+    if (!selection) { setToast('Create a rectangular selection first.'); return; }
     const pixels = new Uint8Array(selection.width * selection.height);
     for (let y = 0; y < selection.height; y += 1) for (let x = 0; x < selection.width; x += 1) {
       const sourceIndex = (selection.y + y) * width + selection.x + x;
       pixels[y * selection.width + x] = compositeResolved[sourceIndex] ? (composite[sourceIndex] ? OPAQUE_ONE : OPAQUE_ZERO) : TRANSPARENT;
     }
-    setBinaryClipboard({ width: selection.width, height: selection.height, pixels }); setToast(`已复制 ${selection.width} × ${selection.height} 的最终可见三态内容。`);
+    setBinaryClipboard({ width: selection.width, height: selection.height, pixels }); setToast(`Copied the final visible three-state content for a ${selection.width} × ${selection.height}.`);
   };
-  const beginPaste = () => { if (!binaryClipboard) { setToast('当前没有可粘贴的矩阵块。'); return; } if (!requireEditableLayer()) return; setPastePreview({ ...binaryClipboard, x: cursor.x, y: cursor.y }); setTool('select'); };
+  const beginPaste = () => { if (!binaryClipboard) { setToast('There is no matrix block to paste.'); return; } if (!requireEditableLayer()) return; setPastePreview({ ...binaryClipboard, x: cursor.x, y: cursor.y }); setTool('select'); };
   const applyShape = () => {
     if (!validateNumericInputs(shapeFieldsRef.current)) return;
-    if (!hasParametricContent) { setToast(shape === 'text' ? '请输入需要写入的文字。' : '光栅宽度、高度和周期必须大于 0。'); return; }
-    if (!clippedRange.hasIntersection) { setToast(`${parametricLabel}完全位于画布外，没有可写入的像素。`); return; }
+    if (!hasParametricContent) { setToast(shape === 'text' ? 'Enter the text to apply.' : 'Grating width, height, and period must be greater than 0.'); return; }
+    if (!clippedRange.hasIntersection) { setToast(`${parametricLabel} is entirely outside the canvas. There are no pixels to write.`); return; }
     if (!requireEditableLayer()) return;
     if (shape === 'text') {
-      void withProcessing('正在栅格化文字', () => {
+      void withProcessing('Rasterizing text', () => {
         pushHistory();
         const touched = writeText(activeLayer.pixels, width, height, textSpec, operation);
-        if (!touched) { undoRef.current.pop(); bumpHistory(); setToast('当前文字在二值化后没有覆盖任何像素。'); return; }
-        bumpDocument(); setToast(partiallyOutside ? '文字已自动剪切并写入画布内区域。' : '文字已栅格化写入当前图层。');
+        if (!touched) { undoRef.current.pop(); bumpHistory(); setToast('The text does not cover any pixels after binarization.'); return; }
+        bumpDocument(); setToast(partiallyOutside ? 'The text has been clipped and written within the canvas.' : 'The text has been rasterized into the current layer.');
       });
       return;
     }
     if (shape === 'grating') {
-      void withProcessing('正在生成光栅', () => {
+      void withProcessing('Generating grating', () => {
         pushHistory();
         const touched = writeGrating(activeLayer.pixels, width, height, gratingSpec, gratingWriteMode, gratingPolarity, operation);
-        if (!touched) { undoRef.current.pop(); bumpHistory(); setToast(gratingDuty <= 0 && gratingWriteMode === 'lines' ? '占空比为 0%，没有可写入的栅线。' : '当前光栅没有覆盖任何采样像素。'); return; }
-        bumpDocument(); setToast(partiallyOutside ? '光栅已自动剪切并写入画布内区域。' : '一维线性光栅已写入当前图层。');
+        if (!touched) { undoRef.current.pop(); bumpHistory(); setToast(gratingDuty <= 0 && gratingWriteMode === 'lines' ? 'The duty cycle is 0%. There are no grating lines to write.' : 'The grating does not cover any sampled pixels.'); return; }
+        bumpDocument(); setToast(partiallyOutside ? 'The grating has been clipped and written within the canvas.' : 'The one-dimensional linear grating has been written to the current layer.');
       });
       return;
     }
     pushHistory();
     const touched = writeShape(activeLayer.pixels, width, height, shapeSpec, operation);
-    if (!touched) { undoRef.current.pop(); bumpHistory(); setToast('当前参数没有覆盖任何像素中心。'); return; }
-    bumpDocument(); setToast(partiallyOutside ? '图形已自动剪切并写入画布内区域。' : '精确图形已写入当前图层。');
+    if (!touched) { undoRef.current.pop(); bumpHistory(); setToast('The current parameters do not cover any pixel centers.'); return; }
+    bumpDocument(); setToast(partiallyOutside ? 'The shape has been clipped and written within the canvas.' : 'The parametric shape has been written to the current layer.');
   };
-  const invertActiveLayer = () => { if (!requireEditableLayer()) return; pushHistory(); for (let index = 0; index < activeLayer.pixels.length; index += 1) { if (activeLayer.pixels[index] === OPAQUE_ONE) activeLayer.pixels[index] = OPAQUE_ZERO; else if (activeLayer.pixels[index] === OPAQUE_ZERO) activeLayer.pixels[index] = OPAQUE_ONE; } bumpDocument(); setToast('当前图层的 0 和 1 已反转，透明像素保持不变。'); };
-  const clearActiveLayer = () => { if (!requireEditableLayer()) return; pushHistory(); activeLayer.pixels.fill(TRANSPARENT); bumpDocument(); setToast('当前图层已清空为透明。'); };
-  const clearAllLayers = () => { if (layersRef.current.some((layer) => layer.locked)) { setToast('存在锁定图层，请先解锁后再清空全部图层。'); return; } if (!window.confirm('确定清空全部图层内容吗？此操作可以撤销。')) return; pushHistory(); layersRef.current.forEach((layer) => layer.pixels.fill(TRANSPARENT)); bumpDocument(); setToast('全部图层已清空为透明。'); };
+  const invertActiveLayer = () => { if (!requireEditableLayer()) return; pushHistory(); for (let index = 0; index < activeLayer.pixels.length; index += 1) { if (activeLayer.pixels[index] === OPAQUE_ONE) activeLayer.pixels[index] = OPAQUE_ZERO; else if (activeLayer.pixels[index] === OPAQUE_ZERO) activeLayer.pixels[index] = OPAQUE_ONE; } bumpDocument(); setToast('The current layer\'s 0 and 1 values have been inverted. Transparent pixels are unchanged.'); };
+  const clearActiveLayer = () => { if (!requireEditableLayer()) return; pushHistory(); activeLayer.pixels.fill(TRANSPARENT); bumpDocument(); setToast('The current layer has been cleared to transparent.'); };
+  const clearAllLayers = () => { if (layersRef.current.some((layer) => layer.locked)) { setToast('Some layers are locked. Unlock them before clearing all layers.'); return; } if (!window.confirm('Clear the contents of all layers? You can undo this action.')) return; pushHistory(); layersRef.current.forEach((layer) => layer.pixels.fill(TRANSPARENT)); bumpDocument(); setToast('All layers have been cleared to transparent.'); };
 
   const addLayer = (fill: LayerFill) => {
     pushHistory();
     const sequence = layersRef.current.length + 1;
-    const name = fill === OPAQUE_ZERO ? `黑色 0 图层 ${sequence}` : fill === OPAQUE_ONE ? `白色 1 图层 ${sequence}` : `图层 ${sequence}`;
+    const name = fill === OPAQUE_ZERO ? `Black 0 Layer ${sequence}` : fill === OPAQUE_ONE ? `White 1 Layer ${sequence}` : `Layer ${sequence}`;
     const layer = createLayer(width, height, name, fill);
     const activeIndex = layersRef.current.findIndex((item) => item.id === activeLayerId);
     layersRef.current.splice(Math.max(0, activeIndex), 0, layer);
     setActiveLayerId(layer.id); setSelectedLayerIds([layer.id]); setLayerCreateMenuOpen(false); bumpDocument();
-    setToast(fill === OPAQUE_ZERO ? '已新建覆盖完整画布的黑色 0 图层。' : fill === OPAQUE_ONE ? '已新建覆盖完整画布的白色 1 图层。' : '已新建透明图层。');
+    setToast(fill === OPAQUE_ZERO ? 'Created a black 0 layer covering the entire canvas.' : fill === OPAQUE_ONE ? 'Created a white 1 layer covering the entire canvas.' : 'Created a transparent layer.');
   };
   const duplicateSelectedLayers = () => {
     const selected = layersRef.current.filter((layer) => selectedSet.has(layer.id)); if (!selected.length) return; pushHistory();
     const topIndex = Math.min(...selected.map((layer) => layersRef.current.indexOf(layer)));
-    const copies = selected.map((layer) => ({ ...cloneLayer(layer), id: makeId(), name: `${layer.name} 副本`, locked: false }));
+    const copies = selected.map((layer) => ({ ...cloneLayer(layer), id: makeId(), name: `${layer.name} Copy`, locked: false }));
     layersRef.current.splice(topIndex, 0, ...copies); setActiveLayerId(copies[0].id); setSelectedLayerIds(copies.map((layer) => layer.id)); bumpDocument();
   };
   const deleteLayer = (id: string) => {
     const index = layersRef.current.findIndex((layer) => layer.id === id); const layer = layersRef.current[index];
     if (!layer) return;
-    if (layer.locked) { setToast('图层已锁定，请先解锁后再删除。'); return; }
+    if (layer.locked) { setToast('This layer is locked. Unlock it before deleting it.'); return; }
     pushHistory(); layersRef.current.splice(index, 1);
-    if (!layersRef.current.length) layersRef.current = [createLayer(width, height, '图层 1')];
+    if (!layersRef.current.length) layersRef.current = [createLayer(width, height, 'Layer 1')];
     const remainingSelection = selectedLayerIds.filter((selectedId) => layersRef.current.some((item) => item.id === selectedId));
     const nextActiveId = layersRef.current.some((item) => item.id === activeLayerId) ? activeLayerId : remainingSelection[0] ?? layersRef.current[Math.min(index, layersRef.current.length - 1)].id;
     setActiveLayerId(nextActiveId); setSelectedLayerIds(remainingSelection.length ? remainingSelection : [nextActiveId]); bumpDocument();
   };
-  const mergeSelectedLayers = () => void withProcessing('正在合并图层', async () => {
+  const mergeSelectedLayers = () => void withProcessing('Merging layers', async () => {
     const selected = layersRef.current.filter((layer) => selectedSet.has(layer.id)); if (selected.length < 2) return;
-    if (selected.some((layer) => layer.locked)) { setToast('选中的图层中包含锁定图层，请先解锁。'); return; }
-    pushHistory(); const existingMerged = layersRef.current.filter((layer) => layer.name.startsWith('合并图层')).length;
-    const merged = createLayer(width, height, existingMerged ? `合并图层 ${existingMerged + 1}` : '合并图层');
+    if (selected.some((layer) => layer.locked)) { setToast('Some selected layers are locked. Unlock them first.'); return; }
+    pushHistory(); const existingMerged = layersRef.current.filter((layer) => layer.name.startsWith('Merged Layer')).length;
+    const merged = createLayer(width, height, existingMerged ? `Merged Layer ${existingMerged + 1}` : 'Merged Layer');
     for (let index = 0; index < merged.pixels.length; index += 1) {
       let hasZero = false; let hasOne = false;
       for (const layer of selected) { if (layer.pixels[index] === OPAQUE_ONE) hasOne = true; else if (layer.pixels[index] === OPAQUE_ZERO) hasZero = true; }
@@ -1087,11 +1087,11 @@ export default function Home() {
     }
     const insertionIndex = Math.min(...selected.map((layer) => layersRef.current.indexOf(layer)));
     layersRef.current = layersRef.current.filter((layer) => !selectedSet.has(layer.id)); layersRef.current.splice(insertionIndex, 0, merged);
-    setActiveLayerId(merged.id); setSelectedLayerIds([merged.id]); bumpDocument(); setToast('选中图层已按 1 > 0 > 透明合并。');
+    setActiveLayerId(merged.id); setSelectedLayerIds([merged.id]); bumpDocument(); setToast('Selected layers have been merged with priority 1 > 0 > transparent.');
   });
   const toggleLayerVisibility = (id: string) => { const layer = layersRef.current.find((item) => item.id === id); if (!layer) return; pushHistory(); layer.visible = !layer.visible; bumpDocument(); };
   const toggleLayerLock = (id: string) => { const layer = layersRef.current.find((item) => item.id === id); if (!layer) return; pushHistory(); layer.locked = !layer.locked; bumpDocument(); };
-  const renameLayer = (id: string) => { const layer = layersRef.current.find((item) => item.id === id); if (!layer) return; if (layer.locked) { setToast('图层已锁定，请先解锁后再重命名。'); return; } const name = window.prompt('请输入新的图层名称：', layer.name)?.trim(); if (!name || name === layer.name) return; pushHistory(); layer.name = name; bumpDocument(); };
+  const renameLayer = (id: string) => { const layer = layersRef.current.find((item) => item.id === id); if (!layer) return; if (layer.locked) { setToast('This layer is locked. Unlock it before renaming it.'); return; } const name = window.prompt('Enter a new layer name:', layer.name)?.trim(); if (!name || name === layer.name) return; pushHistory(); layer.name = name; bumpDocument(); };
   const selectLayer = (event: React.MouseEvent, id: string) => {
     const index = layersRef.current.findIndex((layer) => layer.id === id); const activeIndex = layersRef.current.findIndex((layer) => layer.id === activeLayerId);
     if (event.shiftKey && activeIndex >= 0) { const start = Math.min(index, activeIndex); const end = Math.max(index, activeIndex); setSelectedLayerIds(layersRef.current.slice(start, end + 1).map((layer) => layer.id)); }
@@ -1117,7 +1117,7 @@ export default function Home() {
   };
   const dropLayer = (targetId: string) => { if (!dragLayerId || dragLayerId === targetId) return; const sourceIndex = layersRef.current.findIndex((layer) => layer.id === dragLayerId); const source = layersRef.current[sourceIndex]; if (!source || source.locked) return; let targetIndex = layersRef.current.findIndex((layer) => layer.id === targetId); pushHistory(); layersRef.current.splice(sourceIndex, 1); if (sourceIndex < targetIndex) targetIndex -= 1; layersRef.current.splice(targetIndex, 0, source); setDragLayerId(null); bumpDocument(); };
 
-  const openMatrixEditor = () => void withProcessing('正在打开矩阵', async () => {
+  const openMatrixEditor = () => void withProcessing('Opening matrix', async () => {
     matrixDraftRef.current = new Uint8Array(activeLayer.pixels); setMatrixText(''); setMatrixView('cells'); setMatrixScope('layer');
     setMatrixStartX(Math.max(0, Math.min(width - MATRIX_COLUMNS, cursor.x - Math.floor(MATRIX_COLUMNS / 2)))); setMatrixStartY(Math.max(0, Math.min(height - MATRIX_ROWS, cursor.y - Math.floor(MATRIX_ROWS / 2)))); setMatrixDraftVersion((value) => value + 1); setMatrixOpen(true);
   });
@@ -1128,19 +1128,19 @@ export default function Home() {
     const region = scope === 'selection' && selection ? selection : { x: 0, y: 0, width, height };
     setMatrixScope(scope); setMatrixText(''); setMatrixStartX(region.x); setMatrixStartY(region.y);
   };
-  const loadMatrixText = () => { if (!matrixDraftRef.current) return; if (matrixRegion.width * matrixRegion.height > 300000 && !window.confirm('当前范围较大，转换为文本可能需要一些时间。是否继续？')) return; setMatrixText(matrixScope === 'selection' ? regionToText(matrixDraftRef.current, width, matrixRegion) : layerToText(matrixDraftRef.current, width, height)); };
-  const applyMatrixEditor = () => void withProcessing('正在应用矩阵', async () => {
+  const loadMatrixText = () => { if (!matrixDraftRef.current) return; if (matrixRegion.width * matrixRegion.height > 300000 && !window.confirm('This is a large area. Converting it to text may take a while. Continue?')) return; setMatrixText(matrixScope === 'selection' ? regionToText(matrixDraftRef.current, width, matrixRegion) : layerToText(matrixDraftRef.current, width, height)); };
+  const applyMatrixEditor = () => void withProcessing('Applying matrix', async () => {
     if (!validateNumericInputs(matrixFieldsRef.current)) return;
     if (!requireEditableLayer()) return;
     try {
       if (matrixView === 'text') {
         const rows = parseMatrixText(matrixText, true);
-        if (rows.length !== matrixRegion.height || rows[0].length !== matrixRegion.width) throw new Error(`当前编辑范围为 ${matrixRegion.width} × ${matrixRegion.height}，输入矩阵必须完全一致。`);
+        if (rows.length !== matrixRegion.height || rows[0].length !== matrixRegion.width) throw new Error(`The current editing area is ${matrixRegion.width} × ${matrixRegion.height}. The input matrix must match it exactly.`);
         const draft = matrixDraftRef.current ?? new Uint8Array(activeLayer.pixels);
         rows.forEach((row, y) => row.forEach((value, x) => { draft[(matrixRegion.y + y) * width + matrixRegion.x + x] = value; })); matrixDraftRef.current = draft;
       }
-      if (!matrixDraftRef.current) return; pushHistory(); activeLayer.pixels = new Uint8Array(matrixDraftRef.current); setMatrixOpen(false); bumpDocument(); setToast('当前图层矩阵已更新。');
-    } catch (error) { setToast(error instanceof Error ? error.message : '矩阵格式无法识别。'); }
+      if (!matrixDraftRef.current) return; pushHistory(); activeLayer.pixels = new Uint8Array(matrixDraftRef.current); setMatrixOpen(false); bumpDocument(); setToast('The current layer\'s matrix has been updated.');
+    } catch (error) { setToast(error instanceof Error ? error.message : 'Unrecognized matrix format.'); }
   });
 
   const addImportedLayer = (pixels: Uint8Array, name: string) => { pushHistory(); const layer: Layer = { id: makeId(), name, pixels, visible: true, locked: false }; const activeIndex = layersRef.current.findIndex((item) => item.id === activeLayerId); layersRef.current.splice(Math.max(0, activeIndex), 0, layer); setActiveLayerId(layer.id); setSelectedLayerIds([layer.id]); bumpDocument(); };
@@ -1149,7 +1149,7 @@ export default function Home() {
       const pixels = new Uint8Array(width * height);
       if (file.type === 'image/png' || file.name.toLowerCase().endsWith('.png')) {
         const bitmap = await createImageBitmap(file); const temporary = document.createElement('canvas'); temporary.width = bitmap.width; temporary.height = bitmap.height;
-        const context = temporary.getContext('2d', { willReadFrequently: true }); if (!context) throw new Error('无法读取图片。');
+        const context = temporary.getContext('2d', { willReadFrequently: true }); if (!context) throw new Error('Could not read the image.');
         context.drawImage(bitmap, 0, 0); const sourcePixels = context.getImageData(0, 0, bitmap.width, bitmap.height).data;
         const copyWidth = Math.min(width, bitmap.width); const copyHeight = Math.min(height, bitmap.height);
         for (let y = 0; y < copyHeight; y += 1) for (let x = 0; x < copyWidth; x += 1) {
@@ -1162,38 +1162,38 @@ export default function Home() {
         const rows = parseMatrixText(await file.text(), false); const copyHeight = Math.min(height, rows.length); const copyWidth = Math.min(width, rows[0].length);
         for (let y = 0; y < copyHeight; y += 1) for (let x = 0; x < copyWidth; x += 1) pixels[y * width + x] = rows[y][x];
       }
-      addImportedLayer(pixels, file.name.replace(/\.[^.]+$/, '') || '导入图层'); setToast('文件已从左上角对齐导入为新图层，越界部分已剪切。');
-    } catch (error) { setToast(error instanceof Error ? error.message : '文件导入失败。'); }
+      addImportedLayer(pixels, file.name.replace(/\.[^.]+$/, '') || 'Imported Layer'); setToast('The file has been imported as a new layer aligned to the top-left corner. Out-of-bounds areas were clipped.');
+    } catch (error) { setToast(error instanceof Error ? error.message : 'File import failed.'); }
   };
   const safeExportBaseName = (exportBaseName.trim().replace(/\.(png|csv|txt|bmask)$/i, '').replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-').replace(/[. ]+$/g, '') || `binary-mask-${width}x${height}`);
-  const saveProject = () => void withProcessing('正在保存工程', async () => {
+  const saveProject = () => void withProcessing('Saving project', async () => {
     const payload: ProjectPayload = { format: 'binary-mask-studio', version: 1, width, height, dpi, activeLayerId, layers: layersRef.current.map((layer) => ({ id: layer.id, name: layer.name, visible: layer.visible, locked: layer.locked, pixels: bytesToBase64(layer.pixels) })) };
-    downloadBlob(new Blob([JSON.stringify(payload)], { type: 'application/json' }), `${safeExportBaseName}.bmask`); setDocumentDirty(false); setToast('图层工程已保存为 .bmask。');
+    downloadBlob(new Blob([JSON.stringify(payload)], { type: 'application/json' }), `${safeExportBaseName}.bmask`); setDocumentDirty(false); setToast('The layered project has been saved as a .bmask file.');
   });
   const openProject = async (file: File) => {
     try {
       const payload = JSON.parse(await file.text()) as ProjectPayload;
-      if (payload.format !== 'binary-mask-studio' || payload.version !== 1) throw new Error('不是受支持的 .bmask 工程文件。');
-      if (!Number.isInteger(payload.width) || !Number.isInteger(payload.height) || payload.width < 1 || payload.height < 1 || payload.width > MAX_DIMENSION || payload.height > MAX_DIMENSION) throw new Error('工程中的画布尺寸无效。');
-      if (!Number.isFinite(payload.dpi) || payload.dpi < 1 || payload.dpi > 2400) throw new Error('工程中的 DPI 无效。');
-      if (!Array.isArray(payload.layers) || !payload.layers.length) throw new Error('工程中没有图层。');
+      if (payload.format !== 'binary-mask-studio' || payload.version !== 1) throw new Error('This is not a supported .bmask project file.');
+      if (!Number.isInteger(payload.width) || !Number.isInteger(payload.height) || payload.width < 1 || payload.height < 1 || payload.width > MAX_DIMENSION || payload.height > MAX_DIMENSION) throw new Error('The project\'s canvas dimensions are invalid.');
+      if (!Number.isFinite(payload.dpi) || payload.dpi < 1 || payload.dpi > 2400) throw new Error('The project\'s DPI is invalid.');
+      if (!Array.isArray(payload.layers) || !payload.layers.length) throw new Error('The project contains no layers.');
       const expectedLength = payload.width * payload.height;
-      const layers = payload.layers.map((item, index) => { const pixels = base64ToBytes(item.pixels); if (pixels.length !== expectedLength || pixels.some((value) => value > OPAQUE_ONE)) throw new Error(`图层 ${index + 1} 的数据损坏。`); return { id: item.id || makeId(), name: item.name || `图层 ${index + 1}`, visible: Boolean(item.visible), locked: Boolean(item.locked), pixels }; });
+      const layers = payload.layers.map((item, index) => { const pixels = base64ToBytes(item.pixels); if (pixels.length !== expectedLength || pixels.some((value) => value > OPAQUE_ONE)) throw new Error(`Layer ${index + 1} has corrupted data.`); return { id: item.id || makeId(), name: item.name || `Layer ${index + 1}`, visible: Boolean(item.visible), locked: Boolean(item.locked), pixels }; });
       layersRef.current = layers; setWidth(payload.width); setHeight(payload.height); setDpi(Math.round(payload.dpi));
       const nextActive = layers.some((layer) => layer.id === payload.activeLayerId) ? payload.activeLayerId : layers[0].id;
-      setActiveLayerId(nextActive); setSelectedLayerIds([nextActive]); setCenterX(payload.width / 2); setCenterY(payload.height / 2); setCursor({ x: 0, y: 0 }); setSelection(null); setPastePreview(null); setMovePreview(null); setExportBaseName(file.name.replace(/\.bmask$/i, '') || `binary-mask-${payload.width}x${payload.height}`); resetHistory(); bumpDocument(false); setDocumentDirty(false); setAutoFitRequest((value) => value + 1); setToast('已打开 .bmask 图层工程。');
-    } catch (error) { setToast(error instanceof Error ? error.message : '工程文件无法打开。'); }
+      setActiveLayerId(nextActive); setSelectedLayerIds([nextActive]); setCenterX(payload.width / 2); setCenterY(payload.height / 2); setCursor({ x: 0, y: 0 }); setSelection(null); setPastePreview(null); setMovePreview(null); setExportBaseName(file.name.replace(/\.bmask$/i, '') || `binary-mask-${payload.width}x${payload.height}`); resetHistory(); bumpDocument(false); setDocumentDirty(false); setAutoFitRequest((value) => value + 1); setToast('Opened the .bmask layered project.');
+    } catch (error) { setToast(error instanceof Error ? error.message : 'Could not open the project file.'); }
   };
   const createNewCanvas = () => {
     if (!validateNumericInputs(newCanvasFieldsRef.current)) return;
     const nextWidth = Math.round(newWidth); const nextHeight = Math.round(newHeight); const nextDpi = Math.round(newDpi);
-    if (nextWidth < 1 || nextHeight < 1 || nextWidth > MAX_DIMENSION || nextHeight > MAX_DIMENSION) { setToast(`宽度和高度必须在 1～${MAX_DIMENSION} 之间。`); return; }
-    if (nextDpi < 1 || nextDpi > 2400) { setToast('DPI 必须在 1～2400 之间。'); return; }
-    if (dirtyRef.current && !window.confirm('当前工程有未保存修改。确定新建画布并放弃这些修改吗？')) return;
-    const layer = createLayer(nextWidth, nextHeight, '图层 1'); layersRef.current = [layer]; setWidth(nextWidth); setHeight(nextHeight); setDpi(nextDpi); setActiveLayerId(layer.id); setSelectedLayerIds([layer.id]); setCenterX(nextWidth / 2); setCenterY(nextHeight / 2); setCursor({ x: 0, y: 0 }); setSelection(null); setBinaryClipboard(null); setPastePreview(null); setMovePreview(null); setExportBaseName(`binary-mask-${nextWidth}x${nextHeight}`); resetHistory(); bumpDocument(false); setDocumentDirty(false); setNewCanvasOpen(false); setAutoFitRequest((value) => value + 1); setToast(`已创建 ${nextWidth} × ${nextHeight}、${nextDpi} DPI 画布，参数已锁定。`);
+    if (nextWidth < 1 || nextHeight < 1 || nextWidth > MAX_DIMENSION || nextHeight > MAX_DIMENSION) { setToast(`Width and height must be between 1 and ${MAX_DIMENSION}.`); return; }
+    if (nextDpi < 1 || nextDpi > 2400) { setToast('DPI must be between 1 and 2400.'); return; }
+    if (dirtyRef.current && !window.confirm('This project has unsaved changes. Create a new canvas and discard them?')) return;
+    const layer = createLayer(nextWidth, nextHeight, 'Layer 1'); layersRef.current = [layer]; setWidth(nextWidth); setHeight(nextHeight); setDpi(nextDpi); setActiveLayerId(layer.id); setSelectedLayerIds([layer.id]); setCenterX(nextWidth / 2); setCenterY(nextHeight / 2); setCursor({ x: 0, y: 0 }); setSelection(null); setBinaryClipboard(null); setPastePreview(null); setMovePreview(null); setExportBaseName(`binary-mask-${nextWidth}x${nextHeight}`); resetHistory(); bumpDocument(false); setDocumentDirty(false); setNewCanvasOpen(false); setAutoFitRequest((value) => value + 1); setToast(`Created a ${nextWidth} × ${nextHeight} at ${nextDpi} DPI canvas. Its parameters are now locked.`);
   };
-  const exportPng = () => void withProcessing('正在导出 PNG', async () => { try { downloadBlob(await encodeOneBitPng(composite, width, height, dpi), `${safeExportBaseName}.png`); setToast('已导出严格的 1 位二值 PNG。'); } catch { setToast('当前浏览器不支持 1 位 PNG 编码。'); } });
-  const exportMatrix = (format: 'csv' | 'txt') => void withProcessing(`正在导出 ${format.toUpperCase()}`, async () => { const separator = format === 'csv' ? ',' : ' '; downloadBlob(new Blob([binaryToText(composite, width, height, separator)], { type: 'text/plain;charset=utf-8' }), `${safeExportBaseName}.${format}`); setToast(`已导出 ${format.toUpperCase()} 二值矩阵。`); });
+  const exportPng = () => void withProcessing('Exporting PNG', async () => { try { downloadBlob(await encodeOneBitPng(composite, width, height, dpi), `${safeExportBaseName}.png`); setToast('Exported a strictly binary 1-bit PNG.'); } catch { setToast('This browser does not support 1-bit PNG encoding.'); } });
+  const exportMatrix = (format: 'csv' | 'txt') => void withProcessing(`Exporting ${format.toUpperCase()}`, async () => { const separator = format === 'csv' ? ',' : ' '; downloadBlob(new Blob([binaryToText(composite, width, height, separator)], { type: 'text/plain;charset=utf-8' }), `${safeExportBaseName}.${format}`); setToast(`Exported a ${format.toUpperCase()} binary matrix.`); });
   const changeUnit = (nextUnit: SizeUnit) => { if (nextUnit === sizeUnit) return; const convert = (value: number) => fromPixels(toPixels(value, sizeUnit, dpi), nextUnit, dpi); setDimensionX(convert(dimensionX)); setDimensionY(convert(dimensionY)); setTriangleBase(convert(triangleBase)); setTriangleHeight(convert(triangleHeight)); setTriangleProjection(convert(triangleProjection)); setTextFontSize(convert(textFontSize)); setTextLetterSpacing(convert(textLetterSpacing)); setGratingWidth(convert(gratingWidth)); setGratingHeight(convert(gratingHeight)); setGratingPeriod(convert(gratingPeriod)); setGratingPhase(convert(gratingPhase)); setSizeUnit(nextUnit); };
   const toggleAspect = () => { if (!aspectLinked) setAspectRatio(dimensionX > 0 ? dimensionY / dimensionX : 1); setAspectLinked((value) => !value); };
   const updateDimensionX = (value: number) => { const next = Math.max(0.01, value || 0.01); setDimensionX(next); if (aspectLinked) setDimensionY(Math.max(0.01, next * aspectRatio)); };
@@ -1205,8 +1205,8 @@ export default function Home() {
   const fitCanvas = () => setZoomValue(Math.floor(fitScale * 100));
   const actualSize = () => setZoomValue(100);
   const handleWheel = (event: React.WheelEvent<HTMLDivElement>) => { event.preventDefault(); const frame = canvasFrameRef.current; if (!frame) return; const rect = frame.getBoundingClientRect(); pendingZoomAnchorRef.current = { x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)), y: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)), clientX: event.clientX, clientY: event.clientY }; setZoomValue(zoom + (event.deltaY < 0 ? 10 : -10)); };
-  const refreshFromLogo = () => { if (!dirtyRef.current || window.confirm('当前工程有未保存修改。确定刷新网页并放弃这些修改吗？')) window.location.reload(); };
-  const requestOpenProject = () => { if (!dirtyRef.current || window.confirm('当前工程有未保存修改。确定打开其他工程并放弃这些修改吗？')) projectInputRef.current?.click(); };
+  const refreshFromLogo = () => { if (!dirtyRef.current || window.confirm('This project has unsaved changes. Refresh the page and discard them?')) window.location.reload(); };
+  const requestOpenProject = () => { if (!dirtyRef.current || window.confirm('This project has unsaved changes. Open another project and discard them?')) projectInputRef.current?.click(); };
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -1260,123 +1260,123 @@ export default function Home() {
   return (
     <main className="app-shell">
       <header className="topbar">
-        <button className="brand" type="button" aria-label={dirty ? '刷新网页，当前有未保存修改' : '刷新网页'} onClick={refreshFromLogo}><span className="brand-mark" aria-hidden="true"><i /><i /><i /><i /></span><span><strong>二值掩膜工坊{dirty ? <i className="dirty-dot" title="有未保存修改" /> : null}</strong><small>BINARY MASK STUDIO</small></span></button>
-        <div className="topbar-actions"><button type="button" aria-label="帮助" title="帮助" onClick={() => void openInfoWindow('help')}>?</button><button type="button" aria-label="应用信息" title="应用信息" onClick={() => void openInfoWindow('about')}>!</button></div>
+        <button className="brand" type="button" aria-label={dirty ? 'Refresh page; unsaved changes' : 'Refresh page'} onClick={refreshFromLogo}><span className="brand-mark" aria-hidden="true"><i /><i /><i /><i /></span><span><strong>Binary Mask Studio{dirty ? <i className="dirty-dot" title="Unsaved changes" /> : null}</strong><small>BINARY MASK STUDIO</small></span></button>
+        <div className="topbar-actions"><button type="button" aria-label="Help" title="Help" onClick={() => void openInfoWindow('help')}>?</button><button type="button" aria-label="Application information" title="Application information" onClick={() => void openInfoWindow('about')}>!</button></div>
       </header>
       <section className="workspace">
         <aside className="panel settings-panel">
-          <SectionHeading number="01" title="画布参数" subtitle="CANVAS" />
+          <SectionHeading number="01" title="Canvas" subtitle="CANVAS" />
           <div className="canvas-parameter-stack">
-            <div className="field-grid two-columns compact-fields"><label>宽度<div className="input-shell"><input type="number" value={width} disabled /><FieldSuffix>px</FieldSuffix></div></label><label>高度<div className="input-shell"><input type="number" value={height} disabled /><FieldSuffix>px</FieldSuffix></div></label></div>
-            <div className="dpi-row"><label>DPI<div className="input-shell"><input type="number" value={dpi} disabled /></div></label><button type="button" onClick={() => { setNewWidth(width); setNewHeight(height); setNewDpi(dpi); setNewCanvasOpen(true); }}>新建画布</button></div>
-            <div className="physical-size"><span>物理尺寸</span><strong>{physicalWidth} × {physicalHeight} mm</strong></div>
+            <div className="field-grid two-columns compact-fields"><label>Width<div className="input-shell"><input type="number" value={width} disabled /><FieldSuffix>px</FieldSuffix></div></label><label>Height<div className="input-shell"><input type="number" value={height} disabled /><FieldSuffix>px</FieldSuffix></div></label></div>
+            <div className="dpi-row"><label>DPI<div className="input-shell"><input type="number" value={dpi} disabled /></div></label><button type="button" onClick={() => { setNewWidth(width); setNewHeight(height); setNewDpi(dpi); setNewCanvasOpen(true); }}>New Canvas</button></div>
+            <div className="physical-size"><span>Physical size</span><strong>{physicalWidth} × {physicalHeight} mm</strong></div>
           </div>
           <div className="section-rule" />
           <div ref={shapeFieldsRef} className="shape-section" onFocusCapture={() => setTool('shape')}>
-          <SectionHeading number="02" title="精确图形" subtitle="PARAMETRIC SHAPE" />
-          <label>图形类型<select value={shape} onChange={(event) => setShape(event.target.value as ParametricKind)}><option value="circle">圆</option><option value="triangle">三角形</option><option value="rectangle">矩形</option><option value="text">文本</option><option value="grating">光栅</option></select></label>
-          <div className="field-grid two-columns"><label>中心 X<NumericInput className="number-input" step="0.5" value={centerX} onValueChange={(value) => setCenterX(value)} /></label><label>中心 Y<NumericInput className="number-input" step="0.5" value={centerY} onValueChange={(value) => setCenterY(value)} /></label></div>
+          <SectionHeading number="02" title="Parametric Shapes" subtitle="PARAMETRIC SHAPE" />
+          <label>Shape type<select value={shape} onChange={(event) => setShape(event.target.value as ParametricKind)}><option value="circle">Circle</option><option value="triangle">Triangle</option><option value="rectangle">Rectangle</option><option value="text">Text</option><option value="grating">Grating</option></select></label>
+          <div className="field-grid two-columns"><label>Center X<NumericInput className="number-input" step="0.5" value={centerX} onValueChange={(value) => setCenterX(value)} /></label><label>Center Y<NumericInput className="number-input" step="0.5" value={centerY} onValueChange={(value) => setCenterY(value)} /></label></div>
           {shape === 'text' ? <>
-            <label>文本内容<textarea className="text-content-input" rows={3} value={textContent} onChange={(event) => setTextContent(event.target.value)} spellCheck={false} placeholder="输入单行或多行文本" /></label>
-            <div className="field-grid two-columns"><label>字号<NumericInput className="number-input" min="0.5" step="0.5" value={Number(textFontSize.toFixed(4))} onValueChange={(value) => setTextFontSize(Math.max(0.5, value || 0.5))} /></label><label>字间距<NumericInput className="number-input" step="0.5" value={Number(textLetterSpacing.toFixed(4))} onValueChange={(value) => setTextLetterSpacing(value || 0)} /></label></div>
-            <div className="field-grid two-columns"><label>字体<select value={textFont} onChange={(event) => setTextFont(event.target.value as TextFont)}><option value="sans">无衬线</option><option value="serif">衬线</option><option value="mono">等宽</option></select></label><label>字重<select value={textWeight} onChange={(event) => setTextWeight(event.target.value as TextWeight)}><option value="400">常规</option><option value="700">粗体</option></select></label></div>
-            <div className="field-grid two-columns"><label>行距倍数<NumericInput className="number-input" min="0.1" step="0.1" value={textLineHeight} onValueChange={(value) => setTextLineHeight(Math.max(0.1, value || 0.1))} /></label><label>多行对齐<select value={textAlignment} onChange={(event) => setTextAlignment(event.target.value as TextAlignment)}><option value="left">左对齐</option><option value="center">居中</option><option value="right">右对齐</option></select></label></div>
+            <label>Text content<textarea className="text-content-input" rows={3} value={textContent} onChange={(event) => setTextContent(event.target.value)} spellCheck={false} placeholder="Enter one or more lines of text" /></label>
+            <div className="field-grid two-columns"><label>Font size<NumericInput className="number-input" min="0.5" step="0.5" value={Number(textFontSize.toFixed(4))} onValueChange={(value) => setTextFontSize(Math.max(0.5, value || 0.5))} /></label><label>Letter spacing<NumericInput className="number-input" step="0.5" value={Number(textLetterSpacing.toFixed(4))} onValueChange={(value) => setTextLetterSpacing(value || 0)} /></label></div>
+            <div className="field-grid two-columns"><label>Font family<select value={textFont} onChange={(event) => setTextFont(event.target.value as TextFont)}><option value="sans">Sans serif</option><option value="serif">Serif</option><option value="mono">Monospace</option></select></label><label>Font weight<select value={textWeight} onChange={(event) => setTextWeight(event.target.value as TextWeight)}><option value="400">Regular</option><option value="700">Bold</option></select></label></div>
+            <div className="field-grid two-columns"><label>Line height<NumericInput className="number-input" min="0.1" step="0.1" value={textLineHeight} onValueChange={(value) => setTextLineHeight(Math.max(0.1, value || 0.1))} /></label><label>Text alignment<select value={textAlignment} onChange={(event) => setTextAlignment(event.target.value as TextAlignment)}><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></label></div>
           </> : shape === 'grating' ? <>
             <div className="linked-dimensions">
-              <label>区域宽度<NumericInput className="number-input" min="0.01" step="0.5" value={Number(gratingWidth.toFixed(4))} onValueChange={(value) => updateGratingWidth(value)} /></label>
-              <button className={gratingAspectLinked ? 'link-button active' : 'link-button'} type="button" aria-label={gratingAspectLinked ? '解除区域比例锁定' : '锁定当前区域比例'} aria-pressed={gratingAspectLinked} onClick={toggleGratingAspect}><LinkIcon /></button>
-              <label>区域高度<NumericInput className="number-input" min="0.01" step="0.5" value={Number(gratingHeight.toFixed(4))} onValueChange={(value) => updateGratingHeight(value)} /></label>
+              <label>Area width<NumericInput className="number-input" min="0.01" step="0.5" value={Number(gratingWidth.toFixed(4))} onValueChange={(value) => updateGratingWidth(value)} /></label>
+              <button className={gratingAspectLinked ? 'link-button active' : 'link-button'} type="button" aria-label={gratingAspectLinked ? 'Unlock area aspect ratio' : 'Lock current area aspect ratio'} aria-pressed={gratingAspectLinked} onClick={toggleGratingAspect}><LinkIcon /></button>
+              <label>Area height<NumericInput className="number-input" min="0.01" step="0.5" value={Number(gratingHeight.toFixed(4))} onValueChange={(value) => updateGratingHeight(value)} /></label>
             </div>
-            <div className="field-grid two-columns"><label>周期<NumericInput className="number-input" min="0.01" step="0.5" value={Number(gratingPeriod.toFixed(4))} onValueChange={(value) => setGratingPeriod(Math.max(0.01, value || 0.01))} /></label><label>栅线占空比<div className="input-shell"><NumericInput className="number-input" min="0" max="100" step="0.1" value={gratingDuty} onValueChange={(value) => setGratingDuty(Math.max(0, Math.min(100, value || 0)))} /><FieldSuffix>%</FieldSuffix></div></label></div>
-            <label>相位偏移<NumericInput className="number-input" step="0.5" value={Number(gratingPhase.toFixed(4))} onValueChange={(value) => setGratingPhase(value || 0)} /></label>
+            <div className="field-grid two-columns"><label>Period<NumericInput className="number-input" min="0.01" step="0.5" value={Number(gratingPeriod.toFixed(4))} onValueChange={(value) => setGratingPeriod(Math.max(0.01, value || 0.01))} /></label><label>Duty cycle<div className="input-shell"><NumericInput className="number-input" min="0" max="100" step="0.1" value={gratingDuty} onValueChange={(value) => setGratingDuty(Math.max(0, Math.min(100, value || 0)))} /><FieldSuffix>%</FieldSuffix></div></label></div>
+            <label>Phase offset<NumericInput className="number-input" step="0.5" value={Number(gratingPhase.toFixed(4))} onValueChange={(value) => setGratingPhase(value || 0)} /></label>
           </> : shape !== 'triangle' ? <div className="linked-dimensions">
-            <label>{shape === 'circle' ? '直径 X' : '宽度 X'}<NumericInput className="number-input" min="0.01" step="0.5" value={Number(dimensionX.toFixed(4))} onValueChange={(value) => updateDimensionX(value)} /></label>
-            <button className={aspectLinked ? 'link-button active' : 'link-button'} type="button" aria-label={aspectLinked ? '解除比例锁定' : '锁定当前比例'} aria-pressed={aspectLinked} onClick={toggleAspect}><LinkIcon /></button>
-            <label>{shape === 'circle' ? '直径 Y' : '高度 Y'}<NumericInput className="number-input" min="0.01" step="0.5" value={Number(dimensionY.toFixed(4))} onValueChange={(value) => updateDimensionY(value)} /></label>
+            <label>{shape === 'circle' ? 'Diameter X' : 'Width X'}<NumericInput className="number-input" min="0.01" step="0.5" value={Number(dimensionX.toFixed(4))} onValueChange={(value) => updateDimensionX(value)} /></label>
+            <button className={aspectLinked ? 'link-button active' : 'link-button'} type="button" aria-label={aspectLinked ? 'Unlock aspect ratio' : 'Lock current aspect ratio'} aria-pressed={aspectLinked} onClick={toggleAspect}><LinkIcon /></button>
+            <label>{shape === 'circle' ? 'Diameter Y' : 'Height Y'}<NumericInput className="number-input" min="0.01" step="0.5" value={Number(dimensionY.toFixed(4))} onValueChange={(value) => updateDimensionY(value)} /></label>
           </div> : <>
-            <label>底边长度<NumericInput className="number-input" min="0.01" step="0.5" value={Number(triangleBase.toFixed(4))} onValueChange={(value) => setTriangleBase(Math.max(0.01, value || 0.01))} /></label>
-            <div className="field-grid two-columns"><label>底边对应的高<NumericInput className="number-input" min="0.01" step="0.5" disabled={equilateral} value={Number(resolvedTriangleHeight.toFixed(4))} onValueChange={(value) => setTriangleHeight(Math.max(0.01, value || 0.01))} /></label><label>顶点投影距离<NumericInput className="number-input" step="0.5" disabled={equilateral} value={Number(resolvedTriangleProjection.toFixed(4))} onValueChange={(value) => setTriangleProjection(value || 0)} /></label></div>
-            <label className="checkbox-row"><input type="checkbox" checked={equilateral} onChange={(event) => { const checked = event.target.checked; if (!checked) { setTriangleHeight((triangleBase * Math.sqrt(3)) / 2); setTriangleProjection(triangleBase / 2); } setEquilateral(checked); }} /><span>等边三角形</span></label>
+            <label>Base length<NumericInput className="number-input" min="0.01" step="0.5" value={Number(triangleBase.toFixed(4))} onValueChange={(value) => setTriangleBase(Math.max(0.01, value || 0.01))} /></label>
+            <div className="field-grid two-columns"><label>Triangle height<NumericInput className="number-input" min="0.01" step="0.5" disabled={equilateral} value={Number(resolvedTriangleHeight.toFixed(4))} onValueChange={(value) => setTriangleHeight(Math.max(0.01, value || 0.01))} /></label><label>Apex projection<NumericInput className="number-input" step="0.5" disabled={equilateral} value={Number(resolvedTriangleProjection.toFixed(4))} onValueChange={(value) => setTriangleProjection(value || 0)} /></label></div>
+            <label className="checkbox-row"><input type="checkbox" checked={equilateral} onChange={(event) => { const checked = event.target.checked; if (!checked) { setTriangleHeight((triangleBase * Math.sqrt(3)) / 2); setTriangleProjection(triangleBase / 2); } setEquilateral(checked); }} /><span>Equilateral triangle</span></label>
           </>}
-          <div className="shape-unit-row"><label>单位<select value={sizeUnit} onChange={(event) => changeUnit(event.target.value as SizeUnit)}><option value="px">px</option><option value="mm">mm</option></select></label><label>旋转<div className="input-shell"><NumericInput className="number-input" step="1" value={rotation} onValueChange={(value) => setRotation(value || 0)} /><FieldSuffix>°</FieldSuffix></div></label></div>
-          {shape === 'grating' ? <><label>写入模式<select value={gratingWriteMode} onChange={(event) => setGratingWriteMode(event.target.value as GratingWriteMode)}><option value="cover">完整覆盖</option><option value="lines">仅写栅线</option></select></label>{gratingWriteMode === 'cover' ? <label>极性<select value={gratingPolarity} onChange={(event) => setGratingPolarity(event.target.value as GratingPolarity)}><option value="line1">栅线 1 · 间隔 0</option><option value="line0">栅线 0 · 间隔 1</option></select></label> : <label>栅线操作<select value={operation} onChange={(event) => setOperation(event.target.value as BooleanOperation)}><option value="set1">写入 1</option><option value="set0">写入 0</option><option value="xor">反转 XOR</option></select></label>}</> : <label>布尔操作<select value={operation} onChange={(event) => setOperation(event.target.value as BooleanOperation)}><option value="set1">写入 1</option><option value="set0">写入 0</option><option value="xor">反转 XOR</option></select></label>}
-          <div className={`shape-readout ${!hasParametricContent || !clippedRange.hasIntersection ? 'error' : partiallyOutside || gratingAliased ? 'warning' : ''}`}><span>{shape === 'text' ? '文字像素范围' : shape === 'grating' ? '光栅像素范围' : '画布内像素范围'}</span><strong>{displayBounds}</strong><small>{parametricHint}</small></div>
-          <button className="primary-button" type="button" disabled={!hasParametricContent || !clippedRange.hasIntersection || activeLayer.locked || Boolean(processing)} onClick={applyShape}>应用{parametricLabel}到当前图层 <span>↗</span></button>
+          <div className="shape-unit-row"><label>Units<select value={sizeUnit} onChange={(event) => changeUnit(event.target.value as SizeUnit)}><option value="px">px</option><option value="mm">mm</option></select></label><label>Rotation<div className="input-shell"><NumericInput className="number-input" step="1" value={rotation} onValueChange={(value) => setRotation(value || 0)} /><FieldSuffix>°</FieldSuffix></div></label></div>
+          {shape === 'grating' ? <><label>Write mode<select value={gratingWriteMode} onChange={(event) => setGratingWriteMode(event.target.value as GratingWriteMode)}><option value="cover">Full coverage</option><option value="lines">Lines only</option></select></label>{gratingWriteMode === 'cover' ? <label>Polarity<select value={gratingPolarity} onChange={(event) => setGratingPolarity(event.target.value as GratingPolarity)}><option value="line1">Lines 1 · Gaps 0</option><option value="line0">Lines 0 · Gaps 1</option></select></label> : <label>Line operation<select value={operation} onChange={(event) => setOperation(event.target.value as BooleanOperation)}><option value="set1">Set 1</option><option value="set0">Set 0</option><option value="xor">XOR</option></select></label>}</> : <label>Boolean operation<select value={operation} onChange={(event) => setOperation(event.target.value as BooleanOperation)}><option value="set1">Set 1</option><option value="set0">Set 0</option><option value="xor">XOR</option></select></label>}
+          <div className={`shape-readout ${!hasParametricContent || !clippedRange.hasIntersection ? 'error' : partiallyOutside || gratingAliased ? 'warning' : ''}`}><span>{shape === 'text' ? 'Text pixel bounds' : shape === 'grating' ? 'Grating pixel bounds' : 'Pixel bounds within canvas'}</span><strong>{displayBounds}</strong><small>{parametricHint}</small></div>
+          <button className="primary-button" type="button" disabled={!hasParametricContent || !clippedRange.hasIntersection || activeLayer.locked || Boolean(processing)} onClick={applyShape}>Apply {parametricLabel} to Layer <span>↗</span></button>
           </div>
         </aside>
 
         <section className="canvas-column">
-          <div className={`toolstrip ${tool === 'draw' || tool === 'erase' ? 'brush-open' : ''}`} aria-label="绘图工具">
+          <div className={`toolstrip ${tool === 'draw' || tool === 'erase' ? 'brush-open' : ''}`} aria-label="Drawing tools">
             <div className="tool-group">
-              <div className="tool-popover-anchor"><button className={tool === 'draw' ? 'active' : ''} type="button" onClick={() => activateTool('draw')}><span>✎</span>自由绘制</button>{tool === 'draw' && <div className="brush-popover"><div className="range-wrap"><input aria-label="画笔大小" type="range" min="1" max="128" value={brushSize} onPointerDown={() => setBrushDragging(true)} onPointerUp={() => setBrushDragging(false)} onPointerCancel={() => setBrushDragging(false)} onChange={(event) => setBrushSize(Number(event.target.value))} />{brushDragging && <b style={{ left: `${((brushSize - 1) / 127) * 100}%` }}>{brushSize}px</b>}</div><div className="paint-toggle" role="group" aria-label="绘制值"><button className={paintValue === 0 ? 'selected black' : 'black'} type="button" aria-label="绘制黑色 0" title="黑色 0" onClick={() => setPaintValue(0)} /><button className={paintValue === 1 ? 'selected white' : 'white'} type="button" aria-label="绘制白色 1" title="白色 1" onClick={() => setPaintValue(1)} /></div></div>}</div>
-              <div className="tool-popover-anchor"><button className={tool === 'erase' ? 'active' : ''} type="button" onClick={() => activateTool('erase')}><span>⌫</span>擦除</button>{tool === 'erase' && <div className="brush-popover erase-popover"><div className="range-wrap"><input aria-label="橡皮擦大小" type="range" min="1" max="128" value={brushSize} onPointerDown={() => setBrushDragging(true)} onPointerUp={() => setBrushDragging(false)} onPointerCancel={() => setBrushDragging(false)} onChange={(event) => setBrushSize(Number(event.target.value))} />{brushDragging && <b style={{ left: `${((brushSize - 1) / 127) * 100}%` }}>{brushSize}px</b>}</div></div>}</div>
-              <button className={tool === 'select' ? 'active' : ''} type="button" onClick={() => activateTool('select')}><span>▧</span>选区</button>
-              <button className={tool === 'move' ? 'active' : ''} type="button" disabled={!selection || activeLayer.locked} onClick={beginMove}><span>✥</span>移动</button>
+              <div className="tool-popover-anchor"><button className={tool === 'draw' ? 'active' : ''} type="button" onClick={() => activateTool('draw')}><span>✎</span>Draw</button>{tool === 'draw' && <div className="brush-popover"><div className="range-wrap"><input aria-label="Brush size" type="range" min="1" max="128" value={brushSize} onPointerDown={() => setBrushDragging(true)} onPointerUp={() => setBrushDragging(false)} onPointerCancel={() => setBrushDragging(false)} onChange={(event) => setBrushSize(Number(event.target.value))} />{brushDragging && <b style={{ left: `${((brushSize - 1) / 127) * 100}%` }}>{brushSize}px</b>}</div><div className="paint-toggle" role="group" aria-label="Paint value"><button className={paintValue === 0 ? 'selected black' : 'black'} type="button" aria-label="Paint black 0" title="Black 0" onClick={() => setPaintValue(0)} /><button className={paintValue === 1 ? 'selected white' : 'white'} type="button" aria-label="Paint white 1" title="White 1" onClick={() => setPaintValue(1)} /></div></div>}</div>
+              <div className="tool-popover-anchor"><button className={tool === 'erase' ? 'active' : ''} type="button" onClick={() => activateTool('erase')}><span>⌫</span>Erase</button>{tool === 'erase' && <div className="brush-popover erase-popover"><div className="range-wrap"><input aria-label="Eraser size" type="range" min="1" max="128" value={brushSize} onPointerDown={() => setBrushDragging(true)} onPointerUp={() => setBrushDragging(false)} onPointerCancel={() => setBrushDragging(false)} onChange={(event) => setBrushSize(Number(event.target.value))} />{brushDragging && <b style={{ left: `${((brushSize - 1) / 127) * 100}%` }}>{brushSize}px</b>}</div></div>}</div>
+              <button className={tool === 'select' ? 'active' : ''} type="button" onClick={() => activateTool('select')}><span>▧</span>Select</button>
+              <button className={tool === 'move' ? 'active' : ''} type="button" disabled={!selection || activeLayer.locked} onClick={beginMove}><span>✥</span>Move</button>
             </div>
-            <div className="tool-divider" /><div className="tool-group"><button type="button" disabled={!selection} onClick={copySelection}>复制</button><button type="button" disabled={!binaryClipboard} onClick={beginPaste}>粘贴</button></div>
-            <div className="tool-divider" /><div className="tool-group"><button type="button" disabled={!undoRef.current.length} onClick={undo}>撤销</button><button type="button" disabled={!redoRef.current.length} onClick={redo}>前进</button><button type="button" onClick={invertActiveLayer}>反转</button><button type="button" onClick={clearActiveLayer}>清空</button></div>
+            <div className="tool-divider" /><div className="tool-group"><button type="button" disabled={!selection} onClick={copySelection}>Copy</button><button type="button" disabled={!binaryClipboard} onClick={beginPaste}>Paste</button></div>
+            <div className="tool-divider" /><div className="tool-group"><button type="button" disabled={!undoRef.current.length} onClick={undo}>Undo</button><button type="button" disabled={!redoRef.current.length} onClick={redo}>Redo</button><button type="button" onClick={invertActiveLayer}>Invert</button><button type="button" onClick={clearActiveLayer}>Clear</button></div>
             <div className="tool-divider" /><div className="tool-group">
-              <input ref={fileInputRef} className="visually-hidden" type="file" accept=".png,.txt,.csv,text/plain,image/png" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importFile(file); event.currentTarget.value = ''; }} />
-              <input ref={projectInputRef} className="visually-hidden" type="file" accept=".bmask,application/json" onChange={(event) => { const file = event.target.files?.[0]; if (file) void openProject(file); event.currentTarget.value = ''; }} />
-              <button type="button" disabled={Boolean(processing)} onClick={() => fileInputRef.current?.click()}>导入</button><button type="button" disabled={Boolean(processing)} onClick={openMatrixEditor}>矩阵</button><button type="button" disabled={Boolean(processing)} onClick={requestOpenProject}>打开工程</button><button type="button" disabled={Boolean(processing)} onClick={saveProject}>保存工程</button>
+              <input ref={fileInputRef} aria-label="Import image or matrix file" className="visually-hidden" type="file" accept=".png,.txt,.csv,text/plain,image/png" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importFile(file); event.currentTarget.value = ''; }} />
+              <input ref={projectInputRef} aria-label="Open project file" className="visually-hidden" type="file" accept=".bmask,application/json" onChange={(event) => { const file = event.target.files?.[0]; if (file) void openProject(file); event.currentTarget.value = ''; }} />
+              <button type="button" disabled={Boolean(processing)} onClick={() => fileInputRef.current?.click()}>Import</button><button type="button" disabled={Boolean(processing)} onClick={openMatrixEditor}>Matrix</button><button type="button" disabled={Boolean(processing)} onClick={requestOpenProject}>Open</button><button type="button" disabled={Boolean(processing)} onClick={saveProject}>Save</button>
             </div>
-            {selectionLabel && <span className="selection-chip">{selectionLabel}<button type="button" aria-label="取消选区" title="取消选区" onClick={deselect}>×</button></span>}
+            {selectionLabel && <span className="selection-chip">{selectionLabel}<button type="button" aria-label="Deselect" title="Deselect" onClick={deselect}>×</button></span>}
             {processing && <span className="processing-chip"><i />{processing}</span>}
-            <div className="zoom-tools"><button type="button" aria-label="适合窗口" title="适合窗口 Ctrl+0" onClick={fitCanvas}><FitIcon /></button><label className="zoom-control" aria-label="画布缩放比例"><NumericInput value={zoom} suffix="%" min={MIN_ZOOM} max={MAX_ZOOM} onValueChange={setZoomValue} /></label></div>
+            <div className="zoom-tools"><button type="button" aria-label="Fit to Window" title="Fit to Window Ctrl+0" onClick={fitCanvas}><FitIcon /></button><label className="zoom-control" aria-label="Canvas zoom"><NumericInput value={zoom} suffix="%" min={MIN_ZOOM} max={MAX_ZOOM} onValueChange={setZoomValue} /></label></div>
           </div>
           <div ref={stageRef} className={`stage ${spacePressed ? 'pan-ready' : ''} ${panRef.current ? 'panning' : ''}`} onWheel={handleWheel}><div className="stage-inner" style={{ minWidth: `${displayWidth + 112}px`, minHeight: `${displayHeight + 104}px` }}><div className="canvas-shell" style={{ width: `${displayWidth}px`, height: `${displayHeight}px`, '--grid-size': `${Math.max(8, 24 * (zoom / 100))}px` } as CSSProperties}>
             <div className="ruler ruler-x"><span /><span>{width / 2}</span><span>{width}</span></div><div className="ruler ruler-y"><span /><span>{height / 2}</span><span>{height}</span></div>
-            <div ref={canvasFrameRef} className="canvas-frame"><canvas ref={canvasRef} aria-label="二值图像画布" /><canvas ref={overlayRef} className={`drawing-layer tool-${tool}`} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={stopPointerAction} onPointerCancel={stopPointerAction} onDoubleClick={(event) => { if (event.button !== 0) return; if (pastePreview) { event.preventDefault(); confirmPaste(); } else if (movePreview) { event.preventDefault(); confirmMove(); } }} aria-label="绘图交互层" /><span className="axis axis-x" /><span className="axis axis-y" /><span className="origin-dot" /><span className="origin-label">(0, 0)</span></div>
+            <div ref={canvasFrameRef} className="canvas-frame"><canvas ref={canvasRef} aria-label="Binary image canvas" /><canvas ref={overlayRef} className={`drawing-layer tool-${tool}`} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={stopPointerAction} onPointerCancel={stopPointerAction} onDoubleClick={(event) => { if (event.button !== 0) return; if (pastePreview) { event.preventDefault(); confirmPaste(); } else if (movePreview) { event.preventDefault(); confirmMove(); } }} aria-label="Drawing interaction layer" /><span className="axis axis-x" /><span className="axis axis-y" /><span className="origin-dot" /><span className="origin-label">(0, 0)</span></div>
           </div></div></div>
         </section>
 
         <aside className="right-sidebar">
-          <section className="panel layer-panel"><SectionHeading number="03" title="图层操作" subtitle="LAYERS" />
-            <div className="layer-actions primary-actions"><div className="layer-create-control" ref={layerCreateRef}><button type="button" aria-haspopup="menu" aria-expanded={layerCreateMenuOpen} onClick={() => setLayerCreateMenuOpen((open) => !open)}>新建</button>{layerCreateMenuOpen && <div className="layer-create-menu" role="menu" aria-label="新建图层类型"><button type="button" role="menuitem" onClick={() => addLayer(TRANSPARENT)}><i className="layer-fill-swatch transparent" aria-hidden="true" /><span>透明图层</span></button><button type="button" role="menuitem" onClick={() => addLayer(OPAQUE_ZERO)}><i className="layer-fill-swatch zero" aria-hidden="true" /><span>黑色 0 图层</span></button><button type="button" role="menuitem" onClick={() => addLayer(OPAQUE_ONE)}><i className="layer-fill-swatch one" aria-hidden="true" /><span>白色 1 图层</span></button></div>}</div><button type="button" onClick={duplicateSelectedLayers}>复制图层</button><button type="button" disabled={selectedLayerIds.length < 2} onClick={mergeSelectedLayers}>合并选中</button></div>
-            <div className="layer-list" aria-label="图层列表">{layerList.map((layer, index) => {
+          <section className="panel layer-panel"><SectionHeading number="03" title="Layers" subtitle="LAYERS" />
+            <div className="layer-actions primary-actions"><div className="layer-create-control" ref={layerCreateRef}><button type="button" aria-haspopup="menu" aria-expanded={layerCreateMenuOpen} onClick={() => setLayerCreateMenuOpen((open) => !open)}>New</button>{layerCreateMenuOpen && <div className="layer-create-menu" role="menu" aria-label="New layer type"><button type="button" role="menuitem" onClick={() => addLayer(TRANSPARENT)}><i className="layer-fill-swatch transparent" aria-hidden="true" /><span>Transparent Layer</span></button><button type="button" role="menuitem" onClick={() => addLayer(OPAQUE_ZERO)}><i className="layer-fill-swatch zero" aria-hidden="true" /><span>Black 0 Layer</span></button><button type="button" role="menuitem" onClick={() => addLayer(OPAQUE_ONE)}><i className="layer-fill-swatch one" aria-hidden="true" /><span>White 1 Layer</span></button></div>}</div><button type="button" onClick={duplicateSelectedLayers}>Duplicate</button><button type="button" disabled={selectedLayerIds.length < 2} onClick={mergeSelectedLayers}>Merge Selected</button></div>
+            <div className="layer-list" aria-label="Layer list">{layerList.map((layer, index) => {
               const selected = selectedSet.has(layer.id); const active = layer.id === activeLayerId;
               return <div key={layer.id} className={`layer-row ${selected ? 'selected' : ''} ${active ? 'active' : ''} ${layer.locked ? 'locked' : ''}`} draggable={!layer.locked} onDragStart={() => setDragLayerId(layer.id)} onDragOver={(event) => event.preventDefault()} onDrop={() => dropLayer(layer.id)} onClick={(event) => selectLayer(event, layer.id)} onDoubleClick={() => renameLayer(layer.id)}>
-                <button type="button" className="icon-button" aria-label={layer.visible ? '隐藏图层' : '显示图层'} title={layer.visible ? '隐藏图层' : '显示图层'} onClick={(event) => { event.stopPropagation(); toggleLayerVisibility(layer.id); }}><EyeIcon open={layer.visible} /></button><LayerThumbnail layer={layer} width={width} height={height} version={docVersion} /><span className="layer-name"><strong>{layer.name}</strong><small>{layer.visible ? '可见' : '隐藏'} · {layer.locked ? '已锁定' : '可编辑'}</small></span><button type="button" className="icon-button lock-button" aria-label={layer.locked ? '解锁图层' : '锁定图层'} title={layer.locked ? '解锁图层' : '锁定图层'} onClick={(event) => { event.stopPropagation(); toggleLayerLock(layer.id); }}><LockIcon locked={layer.locked} /></button><button type="button" className="icon-button delete-layer-button" aria-label={`删除图层 ${layer.name}`} title="删除图层" disabled={layer.locked} onClick={(event) => { event.stopPropagation(); deleteLayer(layer.id); }} onDoubleClick={(event) => event.stopPropagation()}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="m9 9 6 6m0-6-6 6" /></svg></button><div className="layer-order-controls" onClick={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}>
-                  <button type="button" className="icon-button layer-order-button" aria-label={`上移图层 ${layer.name}`} title="上移图层" disabled={index === 0 || layer.locked} onClick={() => moveLayer(layer.id, -1)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 15 6-6 6 6" /></svg></button>
+                <button type="button" className="icon-button" aria-label={layer.visible ? 'Hide layer' : 'Show layer'} title={layer.visible ? 'Hide layer' : 'Show layer'} onClick={(event) => { event.stopPropagation(); toggleLayerVisibility(layer.id); }}><EyeIcon open={layer.visible} /></button><LayerThumbnail layer={layer} width={width} height={height} version={docVersion} /><span className="layer-name"><strong>{layer.name}</strong><small>{layer.visible ? 'Visible' : 'Hidden'} · {layer.locked ? 'Locked' : 'Editable'}</small></span><button type="button" className="icon-button lock-button" aria-label={layer.locked ? 'Unlock layer' : 'Lock layer'} title={layer.locked ? 'Unlock layer' : 'Lock layer'} onClick={(event) => { event.stopPropagation(); toggleLayerLock(layer.id); }}><LockIcon locked={layer.locked} /></button><button type="button" className="icon-button delete-layer-button" aria-label={`Delete layer ${layer.name}`} title="Delete layer" disabled={layer.locked} onClick={(event) => { event.stopPropagation(); deleteLayer(layer.id); }} onDoubleClick={(event) => event.stopPropagation()}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="m9 9 6 6m0-6-6 6" /></svg></button><div className="layer-order-controls" onClick={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}>
+                  <button type="button" className="icon-button layer-order-button" aria-label={`Move layer up: ${layer.name}`} title="Move layer up" disabled={index === 0 || layer.locked} onClick={() => moveLayer(layer.id, -1)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 15 6-6 6 6" /></svg></button>
                   <span className="drag-handle" aria-hidden="true"><i /><i /><i /></span>
-                  <button type="button" className="icon-button layer-order-button" aria-label={`下移图层 ${layer.name}`} title="下移图层" disabled={index === layerList.length - 1 || layer.locked} onClick={() => moveLayer(layer.id, 1)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></button>
+                  <button type="button" className="icon-button layer-order-button" aria-label={`Move layer down: ${layer.name}`} title="Move layer down" disabled={index === layerList.length - 1 || layer.locked} onClick={() => moveLayer(layer.id, 1)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></button>
                 </div>
               </div>;
             })}</div>
-            <button className="clear-all-button" type="button" onClick={clearAllLayers}>清空全部图层</button>
+            <button className="clear-all-button" type="button" onClick={clearAllLayers}>Clear All Layers</button>
           </section>
-          <section className="panel inspector-panel"><SectionHeading number="04" title="矩阵检查" subtitle="INSPECTOR" />
-            <div className="coordinate-card"><small>当前像素 · 左上角坐标</small><div><span>X</span><strong>{cursor.x}</strong><span>Y</span><strong>{cursor.y}</strong></div><p>当前像素值 <b>{currentValue}</b></p></div>
-            <div className="metric-list"><div><span>白色像素</span><strong>{whitePixels.toLocaleString('zh-CN')} ({((whitePixels / (width * height)) * 100).toFixed(4)}%)</strong></div><div><span>像素总数</span><strong>{(width * height).toLocaleString('zh-CN')}</strong></div></div>
-            <label className="export-name">导出文件名<input value={exportBaseName} onChange={(event) => setExportBaseName(event.target.value)} onBlur={() => setExportBaseName(safeExportBaseName)} /></label>
-            <div className="download-row"><button type="button" disabled={Boolean(processing)} onClick={exportPng}>导出 PNG</button><button type="button" disabled={Boolean(processing)} onClick={() => exportMatrix('csv')}>导出 CSV</button><button type="button" disabled={Boolean(processing)} onClick={() => exportMatrix('txt')}>导出 TXT</button></div>
+          <section className="panel inspector-panel"><SectionHeading number="04" title="Pixel Inspector" subtitle="INSPECTOR" />
+            <div className="coordinate-card"><small>Current pixel · Top-left origin</small><div><span>X</span><strong>{cursor.x}</strong><span>Y</span><strong>{cursor.y}</strong></div><p>Pixel value <b>{currentValue}</b></p></div>
+            <div className="metric-list"><div><span>White pixels</span><strong>{whitePixels.toLocaleString('en-US')} ({((whitePixels / (width * height)) * 100).toFixed(4)}%)</strong></div><div><span>Total pixels</span><strong>{(width * height).toLocaleString('en-US')}</strong></div></div>
+            <label className="export-name">Export file name<input value={exportBaseName} onChange={(event) => setExportBaseName(event.target.value)} onBlur={() => setExportBaseName(safeExportBaseName)} /></label>
+            <div className="download-row"><button type="button" disabled={Boolean(processing)} onClick={exportPng}>Export PNG</button><button type="button" disabled={Boolean(processing)} onClick={() => exportMatrix('csv')}>Export CSV</button><button type="button" disabled={Boolean(processing)} onClick={() => exportMatrix('txt')}>Export TXT</button></div>
           </section>
         </aside>
       </section>
 
       {newCanvasOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setNewCanvasOpen(false); }}><section ref={newCanvasFieldsRef} className="dialog-card new-canvas-dialog" role="dialog" aria-modal="true" aria-labelledby="new-canvas-title">
-        <div className="modal-header"><div><small>NEW BINARY DOCUMENT</small><h2 id="new-canvas-title">新建画布</h2></div><button type="button" aria-label="关闭" onClick={() => setNewCanvasOpen(false)}>×</button></div><p>创建后，宽度、高度和 DPI 将锁定。每个图层都使用相同的画布尺寸。</p>
-        <div className="field-grid two-columns"><label>宽度<div className="input-shell"><NumericInput className="number-input" min="1" max={MAX_DIMENSION} value={newWidth} onValueChange={(value) => setNewWidth(value)} /><FieldSuffix>px</FieldSuffix></div></label><label>高度<div className="input-shell"><NumericInput className="number-input" min="1" max={MAX_DIMENSION} value={newHeight} onValueChange={(value) => setNewHeight(value)} /><FieldSuffix>px</FieldSuffix></div></label></div>
-        <label>DPI<NumericInput className="number-input" min="1" max="2400" value={newDpi} onValueChange={(value) => setNewDpi(value)} /></label><div className="physical-size"><span>物理尺寸</span><strong>{newDpi > 0 ? ((newWidth / newDpi) * 25.4).toFixed(2) : '—'} × {newDpi > 0 ? ((newHeight / newDpi) * 25.4).toFixed(2) : '—'} mm</strong></div>
-        <div className="modal-footer"><button type="button" onClick={() => setNewCanvasOpen(false)}>取消</button><button className="modal-primary" type="button" onClick={createNewCanvas}>创建并锁定参数</button></div>
+        <div className="modal-header"><div><small>NEW BINARY DOCUMENT</small><h2 id="new-canvas-title">New Canvas</h2></div><button type="button" aria-label="Close" onClick={() => setNewCanvasOpen(false)}>×</button></div><p>Width, height, and DPI are locked after creation. Every layer uses the same canvas dimensions.</p>
+        <div className="field-grid two-columns"><label>Width<div className="input-shell"><NumericInput className="number-input" min="1" max={MAX_DIMENSION} value={newWidth} onValueChange={(value) => setNewWidth(value)} /><FieldSuffix>px</FieldSuffix></div></label><label>Height<div className="input-shell"><NumericInput className="number-input" min="1" max={MAX_DIMENSION} value={newHeight} onValueChange={(value) => setNewHeight(value)} /><FieldSuffix>px</FieldSuffix></div></label></div>
+        <label>DPI<NumericInput className="number-input" min="1" max="2400" value={newDpi} onValueChange={(value) => setNewDpi(value)} /></label><div className="physical-size"><span>Physical size</span><strong>{newDpi > 0 ? ((newWidth / newDpi) * 25.4).toFixed(2) : '—'} × {newDpi > 0 ? ((newHeight / newDpi) * 25.4).toFixed(2) : '—'} mm</strong></div>
+        <div className="modal-footer"><button type="button" onClick={() => setNewCanvasOpen(false)}>Cancel</button><button className="modal-primary" type="button" onClick={createNewCanvas}>Create &amp; Lock</button></div>
       </section></div>}
 
       {matrixOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setMatrixOpen(false); }}><section ref={matrixFieldsRef} className="dialog-card matrix-modal" role="dialog" aria-modal="true" aria-labelledby="matrix-title">
-        <div className="modal-header"><div><small>CURRENT LAYER MATRIX</small><h2 id="matrix-title">编辑当前图层 · {activeLayer.name}</h2></div><button type="button" aria-label="关闭" onClick={() => setMatrixOpen(false)}>×</button></div>
-        <div className="matrix-legend"><span><i className="transparent-swatch">·</i>透明</span><span><i className="zero-swatch">0</i>黑色</span><span><i className="one-swatch">1</i>白色</span><b>{matrixRegion.width} × {matrixRegion.height}</b></div>
-        <div className="matrix-scope" role="group" aria-label="矩阵编辑范围"><button className={matrixScope === 'layer' ? 'active' : ''} type="button" onClick={() => changeMatrixScope('layer')}>整个图层</button><button className={matrixScope === 'selection' ? 'active' : ''} type="button" disabled={!selection} onClick={() => changeMatrixScope('selection')}>当前选区</button><span>{matrixScope === 'selection' ? `X ${matrixRegion.x}～${matrixRegion.x + matrixRegion.width - 1} · Y ${matrixRegion.y}～${matrixRegion.y + matrixRegion.height - 1}` : '编辑完整图层矩阵'}</span></div>
-        <div className="modal-tabs"><button className={matrixView === 'cells' ? 'active' : ''} type="button" onClick={() => setMatrixView('cells')}>单元格编辑</button><button className={matrixView === 'text' ? 'active' : ''} type="button" onClick={() => setMatrixView('text')}>文本输入</button></div>
+        <div className="modal-header"><div><small>CURRENT LAYER MATRIX</small><h2 id="matrix-title">Edit Current Layer · {activeLayer.name}</h2></div><button type="button" aria-label="Close" onClick={() => setMatrixOpen(false)}>×</button></div>
+        <div className="matrix-legend"><span><i className="transparent-swatch">·</i>Transparent</span><span><i className="zero-swatch">0</i>Black</span><span><i className="one-swatch">1</i>White</span><b>{matrixRegion.width} × {matrixRegion.height}</b></div>
+        <div className="matrix-scope" role="group" aria-label="Matrix editing area"><button className={matrixScope === 'layer' ? 'active' : ''} type="button" onClick={() => changeMatrixScope('layer')}>Entire Layer</button><button className={matrixScope === 'selection' ? 'active' : ''} type="button" disabled={!selection} onClick={() => changeMatrixScope('selection')}>Current Selection</button><span>{matrixScope === 'selection' ? `X ${matrixRegion.x}–${matrixRegion.x + matrixRegion.width - 1} · Y ${matrixRegion.y}–${matrixRegion.y + matrixRegion.height - 1}` : 'Editing the entire layer matrix'}</span></div>
+        <div className="modal-tabs"><button className={matrixView === 'cells' ? 'active' : ''} type="button" onClick={() => setMatrixView('cells')}>Cell Editor</button><button className={matrixView === 'text' ? 'active' : ''} type="button" onClick={() => setMatrixView('text')}>Text Input</button></div>
         {matrixView === 'cells' ? <div className="cell-editor">
-          <div className="matrix-navigation"><label>起点 X<NumericInput className="number-input" min={matrixRegion.x} max={matrixRegion.x + matrixRegion.width - 1} value={matrixStartX} onValueChange={(value) => setMatrixStartX(Math.max(matrixRegion.x, Math.min(matrixRegion.x + matrixRegion.width - 1, value || matrixRegion.x)))} /></label><label>起点 Y<NumericInput className="number-input" min={matrixRegion.y} max={matrixRegion.y + matrixRegion.height - 1} value={matrixStartY} onValueChange={(value) => setMatrixStartY(Math.max(matrixRegion.y, Math.min(matrixRegion.y + matrixRegion.height - 1, value || matrixRegion.y)))} /></label><button type="button" onClick={() => setMatrixStartX(Math.max(matrixRegion.x, matrixStartX - MATRIX_COLUMNS))}>←</button><button type="button" onClick={() => setMatrixStartX(Math.min(matrixRegion.x + matrixRegion.width - 1, matrixStartX + MATRIX_COLUMNS))}>→</button><button type="button" onClick={() => setMatrixStartY(Math.max(matrixRegion.y, matrixStartY - MATRIX_ROWS))}>↑</button><button type="button" onClick={() => setMatrixStartY(Math.min(matrixRegion.y + matrixRegion.height - 1, matrixStartY + MATRIX_ROWS))}>↓</button></div>
-          <div className="matrix-grid-wrap"><div className="matrix-grid" style={{ gridTemplateColumns: `46px repeat(${matrixGridColumns.length}, 34px)` }} data-version={matrixDraftVersion}><span className="corner-cell">Y / X</span>{matrixGridColumns.map((x) => <span className="axis-cell" key={`x-${x}`}>{x}</span>)}{matrixGridRows.flatMap((y) => [<span className="axis-cell row-axis" key={`y-${y}`}>{y}</span>, ...matrixGridColumns.map((x) => { const value = matrixDraftRef.current?.[y * width + x] ?? TRANSPARENT; return <button type="button" key={`${x}-${y}`} className={`matrix-cell state-${value}`} aria-label={`X ${x}，Y ${y}，${value === OPAQUE_ONE ? '1 白色' : value === OPAQUE_ZERO ? '0 黑色' : '透明'}`} onClick={() => setMatrixCell(x, y)} onKeyDown={(event) => { if (event.key === '0') setMatrixCell(x, y, OPAQUE_ZERO); else if (event.key === '1') setMatrixCell(x, y, OPAQUE_ONE); else if (event.key === 'Delete' || event.key === 'Backspace') setMatrixCell(x, y, TRANSPARENT); }}>{value === OPAQUE_ONE ? '1' : value === OPAQUE_ZERO ? '0' : '·'}</button>; })])}</div></div>
-          <p>单击按“透明 → 0 → 1”循环；键盘输入 0/1，Delete 或 Backspace 恢复透明。</p>
-        </div> : <div className="text-matrix-editor"><p>第一行固定对应编辑范围顶部。输入尺寸必须与{matrixScope === 'selection' ? '当前选区' : '完整图层'}一致；支持空格、逗号、换行和 MATLAB 分号。</p><button type="button" onClick={loadMatrixText}>载入{matrixScope === 'selection' ? '当前选区' : '当前图层'}文本</button><textarea value={matrixText} onChange={(event) => setMatrixText(event.target.value)} spellCheck={false} placeholder={'· · · · ·\n· 0 1 0 ·\n· 1 1 1 ·\n· · · · ·'} /></div>}
-        <div className="modal-footer"><span>所有修改将在确认时作为一个撤销步骤。</span><button type="button" onClick={() => setMatrixOpen(false)}>取消</button><button className="modal-primary" type="button" disabled={activeLayer.locked} onClick={applyMatrixEditor}>应用到当前图层</button></div>
+          <div className="matrix-navigation"><label>Start X<NumericInput className="number-input" min={matrixRegion.x} max={matrixRegion.x + matrixRegion.width - 1} value={matrixStartX} onValueChange={(value) => setMatrixStartX(Math.max(matrixRegion.x, Math.min(matrixRegion.x + matrixRegion.width - 1, value || matrixRegion.x)))} /></label><label>Start Y<NumericInput className="number-input" min={matrixRegion.y} max={matrixRegion.y + matrixRegion.height - 1} value={matrixStartY} onValueChange={(value) => setMatrixStartY(Math.max(matrixRegion.y, Math.min(matrixRegion.y + matrixRegion.height - 1, value || matrixRegion.y)))} /></label><button type="button" onClick={() => setMatrixStartX(Math.max(matrixRegion.x, matrixStartX - MATRIX_COLUMNS))}>←</button><button type="button" onClick={() => setMatrixStartX(Math.min(matrixRegion.x + matrixRegion.width - 1, matrixStartX + MATRIX_COLUMNS))}>→</button><button type="button" onClick={() => setMatrixStartY(Math.max(matrixRegion.y, matrixStartY - MATRIX_ROWS))}>↑</button><button type="button" onClick={() => setMatrixStartY(Math.min(matrixRegion.y + matrixRegion.height - 1, matrixStartY + MATRIX_ROWS))}>↓</button></div>
+          <div className="matrix-grid-wrap"><div className="matrix-grid" style={{ gridTemplateColumns: `46px repeat(${matrixGridColumns.length}, 34px)` }} data-version={matrixDraftVersion}><span className="corner-cell">Y / X</span>{matrixGridColumns.map((x) => <span className="axis-cell" key={`x-${x}`}>{x}</span>)}{matrixGridRows.flatMap((y) => [<span className="axis-cell row-axis" key={`y-${y}`}>{y}</span>, ...matrixGridColumns.map((x) => { const value = matrixDraftRef.current?.[y * width + x] ?? TRANSPARENT; return <button type="button" key={`${x}-${y}`} className={`matrix-cell state-${value}`} aria-label={`X ${x}, Y ${y}, ${value === OPAQUE_ONE ? '1 White' : value === OPAQUE_ZERO ? '0 Black' : 'Transparent'}`} onClick={() => setMatrixCell(x, y)} onKeyDown={(event) => { if (event.key === '0') setMatrixCell(x, y, OPAQUE_ZERO); else if (event.key === '1') setMatrixCell(x, y, OPAQUE_ONE); else if (event.key === 'Delete' || event.key === 'Backspace') setMatrixCell(x, y, TRANSPARENT); }}>{value === OPAQUE_ONE ? '1' : value === OPAQUE_ZERO ? '0' : '·'}</button>; })])}</div></div>
+          <p>Click to cycle through transparent → 0 → 1. Press 0 or 1 to set a value, or Delete/Backspace to make it transparent.</p>
+        </div> : <div className="text-matrix-editor"><p>The first row corresponds to the top of the editing area. Input dimensions must match the {matrixScope === 'selection' ? 'current selection' : 'entire layer'} exactly. Spaces, commas, line breaks, and MATLAB semicolons are supported.</p><button type="button" onClick={loadMatrixText}>Load {matrixScope === 'selection' ? 'Selection' : 'Layer'} Text</button><textarea value={matrixText} onChange={(event) => setMatrixText(event.target.value)} spellCheck={false} placeholder={'· · · · ·\n· 0 1 0 ·\n· 1 1 1 ·\n· · · · ·'} /></div>}
+        <div className="modal-footer"><span>All changes are saved as one undo step when you confirm.</span><button type="button" onClick={() => setMatrixOpen(false)}>Cancel</button><button className="modal-primary" type="button" disabled={activeLayer.locked} onClick={applyMatrixEditor}>Apply to Current Layer</button></div>
       </section></div>}
       {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} quote={quote} />}
       {aboutOpen && <AboutDialog onClose={() => setAboutOpen(false)} quote={quote} />}
-      {pastePreview && <div className="paste-hint">鼠标定位左上角 · Enter / 双击确认 · Esc 取消 · 方向键微调</div>}
-      {movePreview && <div className="move-hint"><strong>ΔX {movePreview.x - movePreview.source.x >= 0 ? '+' : ''}{movePreview.x - movePreview.source.x} · ΔY {movePreview.y - movePreview.source.y >= 0 ? '+' : ''}{movePreview.y - movePreview.source.y}</strong><span>X {movePreview.x} · Y {movePreview.y}</span><small>鼠标定位左上角 · Enter / 双击确认 · Esc 取消 · 方向键微调</small></div>}
+      {pastePreview && <div className="paste-hint">Pointer sets top-left corner · Enter / double-click to place · Esc to cancel · Arrow keys to adjust</div>}
+      {movePreview && <div className="move-hint"><strong>ΔX {movePreview.x - movePreview.source.x >= 0 ? '+' : ''}{movePreview.x - movePreview.source.x} · ΔY {movePreview.y - movePreview.source.y >= 0 ? '+' : ''}{movePreview.y - movePreview.source.y}</strong><span>X {movePreview.x} · Y {movePreview.y}</span><small>Pointer sets top-left corner · Enter / double-click to place · Esc to cancel · Arrow keys to adjust</small></div>}
       {toast && <div className="toast" role="status"><span />{toast}</div>}
       <span className="history-sentinel" data-history-version={historyVersion} />
     </main>

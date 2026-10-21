@@ -9,7 +9,7 @@ type NumericInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | '
   suffix?: string;
 };
 
-const invalidMessage = '请输入有效的数字或四则运算公式，除数不能为 0。';
+const invalidMessage = 'Enter a valid number or arithmetic expression. Division by zero is not allowed.';
 
 export function validateNumericInputs(scope: HTMLElement | null): boolean {
   const inputs = scope?.querySelectorAll<HTMLInputElement>('input[data-numeric-input]:not(:disabled)');
@@ -38,7 +38,7 @@ export default function NumericInput({ value, onValueChange, suffix = '', min, m
   };
 
   return <input {...props} type="text" data-numeric-input="" value={draft ?? `${value}${suffix}`} aria-invalid={invalid || undefined}
-    title={invalid ? invalidMessage : (props.title ?? '支持 +、-、*、/ 和括号；回车或离开输入框后显示结果。')}
+    title={invalid ? invalidMessage : (props.title ?? 'Supports +, -, *, /, and parentheses. Press Enter or leave the field to show the result.')}
     spellCheck={false} autoComplete="off" maxLength={256}
     onChange={(event) => update(event.target.value, event.currentTarget, false)}
     onBlur={(event) => { update(event.currentTarget.value, event.currentTarget, true); }}

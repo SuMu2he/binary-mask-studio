@@ -1,80 +1,80 @@
-# 帮助与使用说明
+# Help & User Guide
 > QUICK START & COMPLETE MANUAL
 
-## 一分钟上手
-1. 点击“新建画布”，确定宽度、高度和 DPI；创建后这三项在工程内锁定。
-2. 在左侧“精确图形”选择图形、文本或光栅，输入中心、尺寸、排版与旋转，或在工具栏选择自由绘制。
-3. 用右侧图层面板管理可见性、锁定和层叠顺序；透明处会显示灰白棋盘格。
-4. 用选区限制绘制范围，复制最终可见结果，或移动当前图层中的选区内容。
-5. 保存 .bmask 工程以保留图层；在右下角设置文件名后导出 PNG、CSV 或 TXT。
+## One-Minute Quick Start
+1. Click New Canvas and set the width, height, and DPI. These settings are locked for the project after creation.
+2. Under Parametric Shapes on the left, choose a shape, text, or grating and enter its center, dimensions, layout, and rotation. You can also choose Draw from the toolbar.
+3. Use the Layers panel on the right to control visibility, locking, and stacking order. A gray-and-white checkerboard indicates transparency.
+4. Use a selection to limit painting, copy the final visible result, or move selected content within the current layer.
+5. Save a .bmask project to preserve your layers. Set the export file name at the bottom right, then export PNG, CSV, or TXT.
 
-## 1. 画布、像素与坐标 | 画布与坐标
+## 1. Canvas, Pixels & Coordinates | Canvas & Coordinates
 
-坐标原点位于画布左上角，X 向右增加，Y 向下增加，与导出的矩阵行列方向一致。宽 W、高 H 的画布，有效像素坐标为 X=0～W−1、Y=0～H−1；右边界位置为 X=W，下边界位置为 Y=H，它们是几何边界而不是可写像素。
+The origin is the top-left corner of the canvas. X increases to the right and Y increases downward, matching the rows and columns of exported matrices. For a canvas of width W and height H, valid pixel coordinates are X=0–W−1 and Y=0–H−1. The right edge at X=W and bottom edge at Y=H are geometric boundaries, not writable pixels.
 
-新建画布时同时确定宽度、高度和 DPI。创建后它们不能直接修改，所有图层始终与画布等大。DPI 只描述物理尺寸与 PNG 元数据，不改变像素矩阵。最终可见合成结果只供检查和导出，不直接编辑。
+Set the width, height, and DPI when creating a canvas. These settings cannot be changed directly afterward, and every layer always matches the canvas dimensions. DPI determines physical dimensions and PNG metadata; it does not change the pixel matrix. The final visible composite is used for inspection and export, and is not edited directly.
 
-所有可编辑的数值输入框支持简单四则运算，可输入 1920/2、540+100 或 (540+100)/2；支持 + - * / 小数与括号。输入时保留公式，按回车或离开输入框后显示计算结果。结果仍遵循对应参数的范围、尺寸联动与单位规则。无效公式或除以零会标红，请修正后再创建画布或应用图形。
+All editable numeric fields support basic arithmetic, such as 1920/2, 540+100, or (540+100)/2, using +, -, *, /, decimals, and parentheses. The expression remains visible while you type; press Enter or leave the field to show the result. Parameter limits, linked dimensions, and unit rules still apply. Invalid expressions or division by zero are highlighted in red. Correct them before creating a canvas or applying a shape.
 
-## 2. 精确图形、文本与光栅 | 图形、文本与光栅
+## 2. Parametric Shapes, Text & Gratings | Shapes, Text & Gratings
 
-圆、三角形、矩形都以几何重心作为中心与旋转中心。连续几何按像素中心采样，因此边界附近的离散像素数可能与连续面积略有差异。图形超出画布时会自动剪切，只写入画布内像素。
+Circles, triangles, and rectangles use their geometric centroid as both their center and rotation pivot. Shapes are sampled at pixel centers, so the discrete pixel count near an edge may differ slightly from the continuous area. Shapes extending beyond the canvas are clipped automatically; only pixels inside the canvas are written.
 
-圆使用直径 X、直径 Y；矩形使用宽度 X、高度 Y。链条点亮后锁定当前 X:Y 比例，修改任一尺寸会同步另一项。三角形使用底边长度、底边对应高度、第三个顶点在底边上的投影距左顶点的距离；勾选等边三角形后，高和投影自动计算。正旋转方向为顺时针，单位可选 px 或 mm。布尔操作可写入 1、写入 0 或执行 XOR。
+Circles use Diameter X and Diameter Y; rectangles use Width X and Height Y. When the link is active, the current X:Y aspect ratio is locked, and changing either dimension updates the other. Triangles use a base length, its corresponding height, and the distance from the left end of the base to the apex's projection on it. Enable Equilateral triangle to calculate the height and projection automatically. Positive rotation is clockwise. Choose px or mm for dimensions. Boolean operations can set 1, set 0, or apply XOR.
 
-选择“文本”后可输入单行或多行内容，并设置文字块中心、字号、字体、字重、行距倍数、字间距、多行对齐和旋转。字号与字间距使用当前 px/mm 单位；中心是整个排版块的中心。预览框与应用结果使用相同排版参数，边缘抗锯齿以 50% 覆盖阈值转换为严格二值像素，越界部分同样自动剪切。应用后文字会成为当前图层中的普通像素，不再作为独立文字对象编辑，但可撤销后调整参数重做。
+Choose Text to enter one or more lines and set the text block's center, font size, font family, weight, line height, letter spacing, alignment, and rotation. Font size and letter spacing use the current px/mm units; the center applies to the whole text block. The preview and applied result use the same layout. Antialiased edges are converted to strictly binary pixels at a 50% coverage threshold, with out-of-bounds areas clipped. Once applied, text becomes ordinary pixels in the current layer rather than an editable text object. Undo to adjust the settings and apply it again.
 
-网页版使用设备上可用的系统字体：无衬线、衬线和等宽分别有一组通用回退字体。同一工程在缺少相同字体的设备上重新栅格化时，字形可能略有不同；已写入图层并保存到 .bmask 的像素不会因此改变。
+Text rendering uses fonts available on the device, with fallback families for sans serif, serif, and monospace. Rasterizing the same project on a device without the same fonts may produce slightly different glyphs. Pixels already written to layers and saved in a .bmask file do not change.
 
-“光栅”生成一维等周期线性光栅。中心是矩形区域中心、旋转中心和相位参考点；矩形边界与条纹整体旋转。0° 时栅线竖直，周期沿 X 方向变化。相位 0 表示一条基准亮纹的中心穿过光栅中心，正相位使它沿周期正方向移动；相位可输入任意正负值，并按一个周期循环。区域宽高可锁定比例，周期、相位和区域尺寸统一使用当前 px/mm 单位。
+Grating generates a one-dimensional, evenly spaced linear grating. Its center is the rectangle's center, rotation pivot, and phase reference. The rectangular boundary and stripes rotate together. At 0°, the lines are vertical and the period runs along X. At phase 0, the center of a reference bright line passes through the grating center. Positive phase moves it along the positive period direction. Phase can be positive or negative and repeats every period. Area width and height can be linked; period, phase, and area dimensions all use the current px/mm units.
 
-栅线占空比限定为 0%～100%。按像素中心判断时，像素落在距最近基准栅线中心小于半个栅线宽度的位置即属于栅线；临界边界采用固定半开区间，结果不含抗锯齿或灰度。周期低于 2 px 时仍可生成，但界面会提示可能出现离散采样或混叠。
+The duty cycle is limited to 0%–100%. A pixel is assigned to a grating line according to its center's distance from the nearest reference line center, using half the line width as the threshold and a fixed half-open boundary convention. The result contains no antialiasing or gray values. Periods below 2 px are allowed, but the interface warns about discrete sampling or aliasing.
 
-“完整覆盖”会在整个旋转矩形内写入不透明 0/1，可选择“栅线 1、间隔 0”或反相；“仅写栅线”只对栅线像素执行写入 1、写入 0 或 XOR，间隔保持当前图层原有的透明/0/1。光栅不受当前选区限制，只由自身矩形和画布边界裁剪；锁定图层禁止应用，每次应用计为一个撤销步骤。应用后光栅成为普通像素，保存到 .bmask 时无需额外工程格式。
+Full coverage writes opaque 0/1 values throughout the rotated rectangle, using Lines 1 · Gaps 0 or the inverse. Lines only applies Set 1, Set 0, or XOR to line pixels, leaving the gaps' existing transparent/0/1 values unchanged. Gratings ignore the current selection and are clipped only by their rectangle and the canvas. Locked layers cannot be modified. Each application is one undo step. Once applied, a grating becomes ordinary pixels and requires no extra .bmask project format.
 
-## 3. 自由绘制与擦除 | 绘制与擦除
+## 3. Drawing & Erasing | Drawing & Erasing
 
-点击“自由绘制”或“擦除”后，对应按钮下方出现尺寸滑块；拖动时临时显示数值气泡。自由绘制的滑块旁可选择黑色 0 或白色 1；擦除始终写入透明，不会写入黑色。画布光标按实际画笔直径显示，并用中心标记提示当前颜色或擦除状态。
+Choose Draw or Erase to reveal its size slider. A value bubble appears while you drag it. Beside the Draw slider, choose black 0 or white 1. Erasing always writes transparency, never black. The canvas cursor shows the actual brush diameter, with a center marker for the paint value or eraser state.
 
-存在选区时，自由绘制和擦除只能修改当前图层的选区内部。当前图层锁定时任何绘制操作都会被阻止。透明、黑色 0、白色 1 是三个不同的内部状态。
+When a selection exists, drawing and erasing affect only its area within the current layer. A locked current layer blocks all painting. Transparent, black 0, and white 1 are three distinct internal states.
 
-## 4. 选区、复制、粘贴与移动 | 选区与移动
+## 4. Selections, Copying, Pasting & Moving | Selections & Moving
 
-“选区”在画布上建立矩形范围。Ctrl+A 选择整个画布，Ctrl+D 或选区标签中的 × 取消选区，Delete/Backspace 将当前图层选区清为透明。
+Select creates a rectangular area on the canvas. Ctrl+A selects the entire canvas. Ctrl+D or the × in the selection label clears the selection. Delete/Backspace clears the selected area in the current layer to transparent.
 
-“复制”读取选区内的最终可见合成结果，并保留透明、黑色 0、白色 1 三种状态；“粘贴”预览会跟随鼠标移动，并始终把鼠标位置作为矩阵块左上角，将三种状态覆盖写入当前图层，越界部分自动剪切。方向键移动预览 1 px，Shift+方向键移动 10 px，Enter 或双击鼠标左键确认位置并自动取消选区。Esc 取消预览。
+Copy reads the final visible composite within the selection and preserves all three states: transparent, black 0, and white 1. The Paste preview follows the pointer, using its position as the block's top-left corner. It overwrites all three states in the current layer and clips out-of-bounds areas. Arrow keys move the preview by 1 px; Shift+Arrow keys move it by 10 px. Press Enter or double-click the left mouse button to place it and clear the selection. Esc cancels the preview.
 
-“移动”只移动当前图层选区内的透明/0/1 三态内容，源区域清为透明。移动预览同样无需按住鼠标，预览会跟随鼠标，并始终把鼠标位置作为内容块左上角；也可使用方向键精确调整。浮动读数显示位移量和目标坐标。按 Enter 或双击鼠标左键确认后计为一个撤销步骤，并自动取消选区。随后切换画笔或擦除，可在整个当前图层操作。移动预览期间切换自由绘制、擦除或选区工具，也会先确认移动并取消选区；粘贴预览期间切换这些工具则取消尚未确认的粘贴。单纯复制仍保留原选区；普通手动选区存在时，画笔和擦除仍只作用于当前图层的选区内部。
+Move relocates only the selected transparent/0/1 content in the current layer and clears the source area to transparent. The preview follows the pointer without holding a mouse button, with the pointer marking the content's top-left corner. Arrow keys allow precise adjustment. The floating readout shows the displacement and destination coordinates. Press Enter or double-click the left mouse button to confirm one undo step and clear the selection. Drawing and erasing can then affect the entire layer. Switching to Draw, Erase, or Select during a move also confirms it and clears the selection. Switching tools during a paste cancels the unconfirmed paste. Copying alone keeps the selection; while a manually created selection remains active, drawing and erasing stay within its area in the current layer.
 
-## 5. 图层与合成 | 图层
+## 5. Layers & Compositing | Layers
 
-每个图层都与画布等大。“新建”菜单可直接创建透明图层、覆盖完整画布的黑色 0 图层或白色 1 图层；新图层会插入当前图层上方、自动成为当前图层，整次新建计为一个撤销步骤。图层还支持选择、显示/隐藏、锁定/解锁、复制、删除、重命名、拖动排序。每个图层右侧的上下箭头可调整顺序，中间三条横线可拖动排序，锁定按钮与横线之间的红色圆圈叉号可删除该图层。点击“复制图层”会立即生成副本。Shift 可连续多选，Ctrl 可增减选择；双击图层名称可重命名。
+Every layer matches the canvas dimensions. The New menu creates a transparent layer, a full-canvas black 0 layer, or a full-canvas white 1 layer. A new layer is inserted above the current layer and becomes current, with creation recorded as one undo step. Layers support selection, visibility, locking, duplication, deletion, renaming, and drag reordering. Use the arrows on the right of each layer to move it up or down, or drag the three horizontal lines between them. The red circled cross between the lock button and drag handle deletes that layer. Duplicate immediately creates a copy. Shift selects a range; Ctrl toggles individual layers. Double-click a layer name to rename it.
 
-最终显示由最上面的非透明像素覆盖下面图层。合并选中图层时，同一像素按“1 优先于 0，0 优先于透明”写入新图层。反转与普通清空只作用于当前图层；“清空全部图层”需要确认，并要求相关图层未锁定。
+The topmost nontransparent pixel determines the final visible result. Merge Selected creates a new layer using priority 1 over 0 over transparent at each pixel. Invert and Clear affect only the current layer. Clear All Layers asks for confirmation and requires all affected layers to be unlocked.
 
-## 6. 矩阵编辑 | 矩阵
+## 6. Matrix Editing | Matrix
 
-顶部“矩阵”按钮是唯一入口。可选择“整个图层”或“当前选区”，默认整个图层。单元格按“透明 → 0 → 1”循环，也可按 0、1 或 Delete/Backspace直接写入。文本模式以 · 表示透明，第一行对应画布或选区顶部。
+Open the editor with the Matrix button in the toolbar. Choose Entire Layer, the default, or Current Selection. Cells cycle through transparent → 0 → 1. You can also press 0 or 1 to set a value, or Delete/Backspace for transparency. Text mode uses · for transparent pixels. The first row corresponds to the top of the canvas or selection.
 
-选择当前选区时，输入矩阵尺寸必须与选区完全相同，只覆盖当前图层的该区域；选择整个图层时，尺寸必须与完整画布一致。确认应用始终作为一个撤销步骤。
+For Current Selection, the input matrix must exactly match the selection's dimensions and replaces only that area in the current layer. For Entire Layer, the dimensions must match the full canvas. Confirming the edit always creates one undo step.
 
-## 7. 工程、导入与导出 | 文件与导出
+## 7. Projects, Import & Export | Files & Export
 
-.bmask 保存画布尺寸、DPI、全部图层三态像素、可见性、锁定状态和当前图层。保存成功后未保存标记清除；打开工程或刷新前若存在未保存修改，应用会提醒确认。导入 PNG、CSV 或 TXT 会从左上角对齐建立新图层，越界部分剪切。
+A .bmask file stores canvas dimensions, DPI, every layer's three-state pixels, visibility, locking, and the current layer. Saving clears the unsaved-changes indicator. The app asks for confirmation before opening a project or refreshing when changes are unsaved. Importing PNG, CSV, or TXT creates a new layer aligned to the top-left corner and clips out-of-bounds areas.
 
-右下角可先自定义导出文件名。PNG 为严格 1 位二值图并写入 DPI；CSV 与 TXT 第一行对应图像顶部。透明区域在最终导出中按 0 处理。大尺寸保存、导出、合并和矩阵操作会显示非阻塞处理状态。
+Set a custom export file name at the bottom right. PNG exports are strictly 1-bit binary images with DPI metadata. In CSV and TXT, the first row corresponds to the top of the image. Transparent areas are exported as 0. Large saves, exports, merges, and matrix operations show a nonblocking progress message.
 
-## 8. 缩放、平移与快捷键 | 视图与快捷键
+## 8. Zoom, Pan & Shortcuts | View & Shortcuts
 
-鼠标滚轮围绕指针位置缩放；工具栏右侧可直接输入比例。100% 表示 1 个图像像素对应 1 个屏幕像素；点击“适合窗口”后，比例框会显示实际计算出的缩放值。Ctrl+0 适合窗口，Ctrl+1 返回 100%。按住 Space 再拖动，或使用鼠标中键拖动，可平移画布且不产生历史记录。
+Use the mouse wheel to zoom around the pointer, or enter a percentage at the right of the toolbar. At 100%, one image pixel corresponds to one screen pixel. Fit to Window calculates and displays the zoom percentage. Ctrl+0 fits the canvas to the window; Ctrl+1 returns to 100%. Hold Space while dragging, or drag with the middle mouse button, to pan without adding an undo step.
 
-Ctrl+Z | 撤销
-Ctrl+Shift+Z / Ctrl+Y | 前进
-Ctrl+S / Ctrl+O | 保存 / 打开工程
-B / E | 自由绘制 / 擦除
-M / V | 选区 / 移动
-[ / ] | 减小 / 增大画笔
-Ctrl+C / Ctrl+V | 复制 / 粘贴选区矩阵
-方向键 / Shift+方向键 | 移动 1 px / 10 px
+Ctrl+Z | Undo
+Ctrl+Shift+Z / Ctrl+Y | Redo
+Ctrl+S / Ctrl+O | Save / Open project
+B / E | Draw / Erase
+M / V | Select / Move
+[ / ] | Decrease / Increase brush size
+Ctrl+C / Ctrl+V | Copy / Paste selection matrix
+Arrow keys / Shift+Arrow keys | Move 1 px / 10 px
 
-在输入框、下拉框、文本矩阵编辑器或弹窗中输入时，字母快捷键不会误触发；锁定图层不能通过快捷键绕过。
+Letter shortcuts are disabled while typing in input fields, dropdowns, the text matrix editor, or dialogs. Shortcuts cannot bypass a layer's lock.

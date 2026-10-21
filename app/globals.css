@@ -56,12 +56,12 @@ input[type="number"]::-webkit-outer-spin-button { appearance: none; margin: 0; }
 .settings-panel { overflow: auto; }
 .panel-heading { display: flex; align-items: center; gap: 10px; margin-bottom: 17px; }
 .panel-heading > span { display: grid; place-items: center; flex: 0 0 auto; width: 28px; height: 28px; border-radius: 7px; background: var(--ink); color: var(--accent); font: 700 10px ui-monospace, monospace; }
-.panel-heading div { display: grid; }
+.panel-heading div { min-width: 0; display: grid; }
 .panel-heading strong { font-size: 13px; }
 .panel-heading small { margin-top: 1px; color: #8b9690; font-size: 8px; letter-spacing: .16em; }
 .section-rule { height: 1px; margin: 19px -17px; background: var(--line); }
 
-.panel label, .dialog-card label { display: grid; gap: 6px; margin: 0 0 12px; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .055em; }
+.panel label, .dialog-card label { display: grid; gap: 6px; margin: 0 0 12px; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .015em; }
 input, select, textarea { width: 100%; border: 1px solid #d4dcd7; border-radius: 8px; outline: none; background: var(--white); color: var(--ink); }
 input, select { height: 40px; padding: 0 11px; font-size: 13px; font-weight: 650; }
 input:focus, select:focus, textarea:focus { border-color: var(--accent-dark); box-shadow: 0 0 0 3px rgba(199,255,61,.22); }
@@ -78,7 +78,7 @@ input:disabled { background: #eef1ed; color: #737e78; -webkit-text-fill-color: #
 .dpi-row { display: grid; grid-template-columns: minmax(0, 1fr) 88px; gap: 8px; align-items: end; }
 .dpi-row label { margin: 0; }
 .dpi-row button { height: 40px; border: 1px solid var(--line); border-radius: 8px; background: white; color: var(--ink); font-size: 10px; font-weight: 800; }
-.physical-size { display: flex; justify-content: space-between; align-items: center; min-height: 40px; padding: 0 11px; border-radius: 8px; background: #eef1ed; color: var(--muted); font-size: 10px; }
+.physical-size { display: flex; gap: 8px; justify-content: space-between; align-items: center; min-height: 40px; padding: 0 11px; border-radius: 8px; background: #eef1ed; color: var(--muted); font-size: 10px; }
 .physical-size strong { color: var(--ink); font-size: 10px; white-space: nowrap; }
 
 .linked-dimensions { display: grid; grid-template-columns: minmax(0,1fr) 40px minmax(0,1fr); gap: 6px; align-items: end; }
@@ -169,7 +169,7 @@ input:disabled { background: #eef1ed; color: #737e78; -webkit-text-fill-color: #
 .layer-actions .danger-text { color: var(--danger); }
 .layer-create-control { position: relative; min-width: 0; }
 .layer-create-control > button { width: 100%; }
-.layer-create-menu { position: absolute; z-index: 30; top: calc(100% + 5px); left: 0; width: 150px; padding: 5px; border: 1px solid var(--line-strong); border-radius: 8px; background: white; box-shadow: 0 10px 26px rgba(15,38,29,.18); }
+.layer-create-menu { position: absolute; z-index: 30; top: calc(100% + 5px); left: 0; width: 176px; padding: 5px; border: 1px solid var(--line-strong); border-radius: 8px; background: white; box-shadow: 0 10px 26px rgba(15,38,29,.18); }
 .layer-actions .layer-create-menu button { display: grid; grid-template-columns: 20px minmax(0,1fr); align-items: center; gap: 8px; width: 100%; height: 34px; padding: 0 7px; border: 0; text-align: left; }
 .layer-actions .layer-create-menu button:hover { background: #eef3ec; }
 .layer-fill-swatch { width: 18px; height: 18px; border: 1px solid #c9d1cc; border-radius: 4px; }
@@ -221,8 +221,8 @@ input:disabled { background: #eef1ed; color: #737e78; -webkit-text-fill-color: #
 .matrix-modal { width: min(820px, 100%); display: grid; grid-template-rows: auto auto auto auto minmax(0,1fr) auto; gap: 12px; overflow: hidden; }
 .modal-header { display: flex; justify-content: space-between; align-items: start; }
 .modal-header small { color: var(--accent-dark); font-size: 8px; font-weight: 800; letter-spacing: .18em; }
-.modal-header h2 { margin: 3px 0 0; font-size: 20px; letter-spacing: -.02em; }
-.modal-header > button { width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 50%; background: white; color: var(--ink); font-size: 20px; }
+.modal-header h2 { margin: 3px 12px 0 0; font-size: 20px; letter-spacing: -.02em; }
+.modal-header > button { flex: 0 0 34px; width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 50%; background: white; color: var(--ink); font-size: 20px; }
 .dialog-card > p { margin: 12px 0 18px; color: var(--muted); font-size: 11px; line-height: 1.6; }
 .modal-footer { display: flex; align-items: center; justify-content: end; gap: 8px; margin-top: 14px; }
 .modal-footer span { margin-right: auto; color: var(--muted); font-size: 9px; }

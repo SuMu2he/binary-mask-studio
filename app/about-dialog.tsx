@@ -61,7 +61,7 @@ export default function AboutDialog({ onClose, quote }: { onClose: () => void; q
       {document ? <>
         <div className="about-logo"><span className="brand-mark" aria-hidden="true"><i /><i /><i /><i /></span><strong>{document.name}</strong></div>
         <dl>{document.fields.map((field, index) => <div key={index}><dt>{field.label}</dt><dd>{field.value}</dd></div>)}</dl>
-      </> : <div className="about-logo"><p role={failed ? 'alert' : 'status'}>{failed ? '应用信息暂时无法加载，请关闭后重试。' : '正在加载应用信息…'}</p></div>}
+      </> : <div className="about-logo"><p role={failed ? 'alert' : 'status'}>{failed ? 'Application information could not be loaded. Close this window and try again.' : 'Loading application information…'}</p></div>}
       {document && <div className="about-quote"><span>{quote.content}</span><small>{quote.source}</small></div>}
     </section>
   </div>;
