@@ -109,6 +109,8 @@ input:disabled { background: #eef1ed; color: #737e78; -webkit-text-fill-color: #
 .toolstrip button { height: 34px; padding: 0 10px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--muted); font-size: 10px; font-weight: 750; white-space: nowrap; }
 .toolstrip button:hover:not(:disabled) { border-color: var(--line); background: white; color: var(--ink); }
 .toolstrip button span { margin-right: 4px; font-size: 13px; }
+.toolstrip .tool-icon { display: inline-flex; align-items: center; vertical-align: middle; }
+.toolstrip .tool-icon svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .toolstrip button.active { border-color: var(--ink); background: var(--ink); color: white; }
 .toolstrip button.active span { color: var(--accent); }
 .tool-divider { flex: 0 0 1px; height: 22px; margin: 0 2px; background: var(--line); }

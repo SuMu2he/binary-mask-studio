@@ -514,6 +514,10 @@ function LockIcon({ locked }: { locked: boolean }) {
   return <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2" /><path d={locked ? 'M8 10V7a4 4 0 0 1 8 0v3' : 'M16 10V7a4 4 0 0 0-7.7-1.5'} /></svg>;
 }
 
+function EraserIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m13.5 3.5-11 10a2.1 2.1 0 0 0 0 3L6 20h5l9.5-9.5a2.1 2.1 0 0 0 0-3l-4-4a2.1 2.1 0 0 0-3 0Z" /><path d="m7 9 8 8M11 20h10" /></svg>;
+}
+
 function FitIcon() {
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5" /><rect x="7" y="7" width="10" height="10" rx="1" /></svg>;
 }
@@ -1309,7 +1313,7 @@ export default function Home() {
           <div className={`toolstrip ${tool === 'draw' || tool === 'erase' ? 'brush-open' : ''}`} aria-label="Drawing tools">
             <div className="tool-group">
               <div className="tool-popover-anchor"><button className={tool === 'draw' ? 'active' : ''} type="button" onClick={() => activateTool('draw')}><span>✎</span>Draw</button>{tool === 'draw' && <div className="brush-popover"><div className="range-wrap"><input aria-label="Brush size" type="range" min="1" max="128" value={brushSize} onPointerDown={() => setBrushDragging(true)} onPointerUp={() => setBrushDragging(false)} onPointerCancel={() => setBrushDragging(false)} onChange={(event) => setBrushSize(Number(event.target.value))} />{brushDragging && <b style={{ left: `${((brushSize - 1) / 127) * 100}%` }}>{brushSize}px</b>}</div><div className="paint-toggle" role="group" aria-label="Paint value"><button className={paintValue === 0 ? 'selected black' : 'black'} type="button" aria-label="Paint black 0" title="Black 0" onClick={() => setPaintValue(0)} /><button className={paintValue === 1 ? 'selected white' : 'white'} type="button" aria-label="Paint white 1" title="White 1" onClick={() => setPaintValue(1)} /></div></div>}</div>
-              <div className="tool-popover-anchor"><button className={tool === 'erase' ? 'active' : ''} type="button" onClick={() => activateTool('erase')}><span>⌫</span>Erase</button>{tool === 'erase' && <div className="brush-popover erase-popover"><div className="range-wrap"><input aria-label="Eraser size" type="range" min="1" max="128" value={brushSize} onPointerDown={() => setBrushDragging(true)} onPointerUp={() => setBrushDragging(false)} onPointerCancel={() => setBrushDragging(false)} onChange={(event) => setBrushSize(Number(event.target.value))} />{brushDragging && <b style={{ left: `${((brushSize - 1) / 127) * 100}%` }}>{brushSize}px</b>}</div></div>}</div>
+              <div className="tool-popover-anchor"><button className={tool === 'erase' ? 'active' : ''} type="button" onClick={() => activateTool('erase')}><span className="tool-icon" aria-hidden="true"><EraserIcon /></span>Erase</button>{tool === 'erase' && <div className="brush-popover erase-popover"><div className="range-wrap"><input aria-label="Eraser size" type="range" min="1" max="128" value={brushSize} onPointerDown={() => setBrushDragging(true)} onPointerUp={() => setBrushDragging(false)} onPointerCancel={() => setBrushDragging(false)} onChange={(event) => setBrushSize(Number(event.target.value))} />{brushDragging && <b style={{ left: `${((brushSize - 1) / 127) * 100}%` }}>{brushSize}px</b>}</div></div>}</div>
               <button className={tool === 'select' ? 'active' : ''} type="button" onClick={() => activateTool('select')}><span>▧</span>Select</button>
               <button className={tool === 'move' ? 'active' : ''} type="button" disabled={!selection || activeLayer.locked} onClick={beginMove}><span>✥</span>Move</button>
             </div>
