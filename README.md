@@ -24,15 +24,15 @@ pnpm preview
 
 ## GitHub Pages 自动部署
 
-网站地址：**https://sumu2he.github.io/binary-mask/**
+网站地址：**[打开 Binary Mask Studio](https://sumu2he.github.io/binary-mask-studio/)**
 
-`.github/workflows/pages.yml` 会在每次提交到 `main` 分支后，自动安装依赖、构建静态网站并发布到 GitHub Pages。也可以在仓库的 **Actions → Deploy GitHub Pages → Run workflow** 手动发布。构建和发布进度可在 [Actions](https://github.com/SuMu2he/binary-mask/actions/workflows/pages.yml) 查看。
+`.github/workflows/pages.yml` 会在每次提交到 `main` 分支后，自动安装依赖、构建静态网站并发布到 GitHub Pages。也可以在仓库的 **Actions → Deploy GitHub Pages → Run workflow** 手动发布。构建和发布进度可在 [Actions](https://github.com/SuMu2he/binary-mask-studio/actions/workflows/pages.yml) 查看。
 
 在 GitHub 中修改 **`public/about.txt`** 或 **`public/help.txt`** 并提交到 `main` 后，网站会在部署成功后同步更新。发布需要一些时间；完成后刷新页面，再打开对应弹窗即可看到新内容。修改 `README.md` 会更新仓库自述文件。
 
 构建时，两份 TXT 的内容也会随网页一起加载。帮助和应用信息弹窗打开时立即显示完整正文及诗句；后台读取 TXT 时保留现有正文，避免弹窗先显示诗句、再补上内容。网络暂时不可用时仍可查看随网页加载的文档。
 
-仓库的 **Settings → Pages → Build and deployment → Source** 使用 **GitHub Actions**。工作流读取 Pages 的实际网址和路径，因此 GitHub Pages 的 `/binary-mask` 路径已自动配置。
+仓库的 **Settings → Pages → Build and deployment → Source** 使用 **GitHub Actions**。工作流读取 Pages 的实际网址和路径，因此 GitHub Pages 的 `/binary-mask-studio` 路径已自动配置。
 
 ### 手动构建
 
