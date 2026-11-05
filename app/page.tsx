@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import HelpDialog from './help-dialog';
 import AboutDialog from './about-dialog';
 import NumericInput, { validateNumericInputs } from './numeric-input';
+import { PanelSplitter, usePanelLayout } from './panel-layout';
 
 type ShapeKind = 'circle' | 'triangle' | 'rectangle';
 type ParametricKind = ShapeKind | 'text' | 'grating';
@@ -572,6 +573,7 @@ function SectionHeading({ number, title, subtitle }: { number: string; title: st
 function FieldSuffix({ children }: { children: React.ReactNode }) { return <span className="field-suffix">{children}</span>; }
 
 export default function Home() {
+  const layout = usePanelLayout();
   const initialLayerRef = useRef<Layer | null>(null);
   if (!initialLayerRef.current) {
     const layer = createLayer(DEFAULT_WIDTH, DEFAULT_HEIGHT, 'Layer 1');
@@ -584,7 +586,7 @@ export default function Home() {
   const canvasFrameRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const projectInputRef = useRef<HTMLInputElement>(null);
-  const shapeFieldsRef = useRef<HTMLDivElement>(null);
+  const shapeFieldsRef = useRef<HTMLElement>(null);
   const newCanvasFieldsRef = useRef<HTMLElement>(null);
   const matrixFieldsRef = useRef<HTMLElement>(null);
   const layerCreateRef = useRef<HTMLDivElement>(null);
@@ -1267,16 +1269,18 @@ export default function Home() {
         <button className="brand" type="button" aria-label={dirty ? 'Refresh page; unsaved changes' : 'Refresh page'} onClick={refreshFromLogo}><span className="brand-mark" aria-hidden="true"><i /><i /><i /><i /></span><span><strong>Binary Mask Studio{dirty ? <i className="dirty-dot" title="Unsaved changes" /> : null}</strong><small>BINARY MASK STUDIO</small></span></button>
         <div className="topbar-actions"><button type="button" aria-label="Help" title="Help" onClick={() => void openInfoWindow('help')}>?</button><button type="button" aria-label="Application information" title="Application information" onClick={() => void openInfoWindow('about')}>!</button></div>
       </header>
-      <section className="workspace">
-        <aside className="panel settings-panel">
+      <section className="workspace" ref={layout.workspaceRef} style={layout.style}>
+        <aside className="left-sidebar" id="settings-column" ref={layout.leftRef}>
+          <section className="panel settings-panel" id="canvas-settings">
           <SectionHeading number="01" title="Canvas" subtitle="CANVAS" />
           <div className="canvas-parameter-stack">
             <div className="field-grid two-columns compact-fields"><label>Width<div className="input-shell"><input type="number" value={width} disabled /><FieldSuffix>px</FieldSuffix></div></label><label>Height<div className="input-shell"><input type="number" value={height} disabled /><FieldSuffix>px</FieldSuffix></div></label></div>
             <div className="dpi-row"><label>DPI<div className="input-shell"><input type="number" value={dpi} disabled /></div></label><button type="button" onClick={() => { setNewWidth(width); setNewHeight(height); setNewDpi(dpi); setNewCanvasOpen(true); }}>New Canvas</button></div>
             <div className="physical-size"><span>Physical size</span><strong>{physicalWidth} × {physicalHeight} mm</strong></div>
           </div>
-          <div className="section-rule" />
-          <div ref={shapeFieldsRef} className="shape-section" onFocusCapture={() => setTool('shape')}>
+          </section>
+          <PanelSplitter orientation="horizontal" label="Resize Canvas and Parametric Shapes" controls="canvas-settings parametric-shapes" {...layout.canvas} />
+          <section ref={shapeFieldsRef} className="panel settings-panel" id="parametric-shapes" onFocusCapture={() => setTool('shape')}>
           <SectionHeading number="02" title="Parametric Shapes" subtitle="PARAMETRIC SHAPE" />
           <label>Shape type<select value={shape} onChange={(event) => setShape(event.target.value as ParametricKind)}><option value="circle">Circle</option><option value="triangle">Triangle</option><option value="rectangle">Rectangle</option><option value="text">Text</option><option value="grating">Grating</option></select></label>
           <div className="field-grid two-columns"><label>Center X<NumericInput className="number-input" step="0.5" value={centerX} onValueChange={(value) => setCenterX(value)} /></label><label>Center Y<NumericInput className="number-input" step="0.5" value={centerY} onValueChange={(value) => setCenterY(value)} /></label></div>
@@ -1306,10 +1310,11 @@ export default function Home() {
           {shape === 'grating' ? <><label>Write mode<select value={gratingWriteMode} onChange={(event) => setGratingWriteMode(event.target.value as GratingWriteMode)}><option value="cover">Full coverage</option><option value="lines">Lines only</option></select></label>{gratingWriteMode === 'cover' ? <label>Polarity<select value={gratingPolarity} onChange={(event) => setGratingPolarity(event.target.value as GratingPolarity)}><option value="line1">Lines 1 · Gaps 0</option><option value="line0">Lines 0 · Gaps 1</option></select></label> : <label>Line operation<select value={operation} onChange={(event) => setOperation(event.target.value as BooleanOperation)}><option value="set1">Set 1</option><option value="set0">Set 0</option><option value="xor">XOR</option></select></label>}</> : <label>Boolean operation<select value={operation} onChange={(event) => setOperation(event.target.value as BooleanOperation)}><option value="set1">Set 1</option><option value="set0">Set 0</option><option value="xor">XOR</option></select></label>}
           <div className={`shape-readout ${!hasParametricContent || !clippedRange.hasIntersection ? 'error' : partiallyOutside || gratingAliased ? 'warning' : ''}`}><span>{shape === 'text' ? 'Text pixel bounds' : shape === 'grating' ? 'Grating pixel bounds' : 'Pixel bounds within canvas'}</span><strong>{displayBounds}</strong><small>{parametricHint}</small></div>
           <button className="primary-button" type="button" disabled={!hasParametricContent || !clippedRange.hasIntersection || activeLayer.locked || Boolean(processing)} onClick={applyShape}>Apply {parametricLabel} to Layer <span>↗</span></button>
-          </div>
+          </section>
         </aside>
 
-        <section className="canvas-column">
+        <PanelSplitter orientation="vertical" label="Resize settings and image columns" controls="settings-column image-column" {...layout.left} />
+        <section className="canvas-column" id="image-column">
           <div className={`toolstrip ${tool === 'draw' || tool === 'erase' ? 'brush-open' : ''}`} aria-label="Drawing tools">
             <div className="tool-group">
               <div className="tool-popover-anchor"><button className={tool === 'draw' ? 'active' : ''} type="button" onClick={() => activateTool('draw')}><span>✎</span>Draw</button>{tool === 'draw' && <div className="brush-popover"><div className="range-wrap"><input aria-label="Brush size" type="range" min="1" max="128" value={brushSize} onPointerDown={() => setBrushDragging(true)} onPointerUp={() => setBrushDragging(false)} onPointerCancel={() => setBrushDragging(false)} onChange={(event) => setBrushSize(Number(event.target.value))} />{brushDragging && <b style={{ left: `${((brushSize - 1) / 127) * 100}%` }}>{brushSize}px</b>}</div><div className="paint-toggle" role="group" aria-label="Paint value"><button className={paintValue === 0 ? 'selected black' : 'black'} type="button" aria-label="Paint black 0" title="Black 0" onClick={() => setPaintValue(0)} /><button className={paintValue === 1 ? 'selected white' : 'white'} type="button" aria-label="Paint white 1" title="White 1" onClick={() => setPaintValue(1)} /></div></div>}</div>
@@ -1334,8 +1339,9 @@ export default function Home() {
           </div></div></div>
         </section>
 
-        <aside className="right-sidebar">
-          <section className="panel layer-panel"><SectionHeading number="03" title="Layers" subtitle="LAYERS" />
+        <PanelSplitter orientation="vertical" className="right-column-splitter" label="Resize image and inspector columns" controls="image-column inspector-column" {...layout.right} />
+        <aside className="right-sidebar" id="inspector-column" ref={layout.rightRef}>
+          <section className="panel layer-panel" id="layers-panel"><SectionHeading number="03" title="Layers" subtitle="LAYERS" />
             <div className="layer-actions primary-actions"><div className="layer-create-control" ref={layerCreateRef}><button type="button" aria-haspopup="menu" aria-expanded={layerCreateMenuOpen} onClick={() => setLayerCreateMenuOpen((open) => !open)}>New</button>{layerCreateMenuOpen && <div className="layer-create-menu" role="menu" aria-label="New layer type"><button type="button" role="menuitem" onClick={() => addLayer(TRANSPARENT)}><i className="layer-fill-swatch transparent" aria-hidden="true" /><span>Transparent Layer</span></button><button type="button" role="menuitem" onClick={() => addLayer(OPAQUE_ZERO)}><i className="layer-fill-swatch zero" aria-hidden="true" /><span>Black 0 Layer</span></button><button type="button" role="menuitem" onClick={() => addLayer(OPAQUE_ONE)}><i className="layer-fill-swatch one" aria-hidden="true" /><span>White 1 Layer</span></button></div>}</div><button type="button" onClick={duplicateSelectedLayers}>Duplicate</button><button type="button" disabled={selectedLayerIds.length < 2} onClick={mergeSelectedLayers}>Merge Selected</button></div>
             <div className="layer-list" aria-label="Layer list">{layerList.map((layer, index) => {
               const selected = selectedSet.has(layer.id); const active = layer.id === activeLayerId;
@@ -1349,7 +1355,8 @@ export default function Home() {
             })}</div>
             <button className="clear-all-button" type="button" onClick={clearAllLayers}>Clear All Layers</button>
           </section>
-          <section className="panel inspector-panel"><SectionHeading number="04" title="Pixel Inspector" subtitle="INSPECTOR" />
+          <PanelSplitter orientation="horizontal" label="Resize Layers and Pixel Inspector" controls="layers-panel pixel-inspector" {...layout.layers} />
+          <section className="panel inspector-panel" id="pixel-inspector"><SectionHeading number="04" title="Pixel Inspector" subtitle="INSPECTOR" />
             <div className="coordinate-card"><small>Current pixel · Top-left origin</small><div><span>X</span><strong>{cursor.x}</strong><span>Y</span><strong>{cursor.y}</strong></div><p>Pixel value <b>{currentValue}</b></p></div>
             <div className="metric-list"><div><span>White pixels</span><strong>{whitePixels.toLocaleString('en-US')} ({((whitePixels / (width * height)) * 100).toFixed(4)}%)</strong></div><div><span>Total pixels</span><strong>{(width * height).toLocaleString('en-US')}</strong></div></div>
             <label className="export-name">Export file name<input value={exportBaseName} onChange={(event) => setExportBaseName(event.target.value)} onBlur={() => setExportBaseName(safeExportBaseName)} /></label>

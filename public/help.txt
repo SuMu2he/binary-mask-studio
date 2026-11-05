@@ -66,6 +66,8 @@ Set a custom export file name at the bottom right. PNG exports are strictly 1-bi
 
 ## 8. Zoom, Pan & Shortcuts | View & Shortcuts
 
+Drag the dividers between columns or between panels to adjust the workspace. Double-click a divider to restore its default position. With a divider focused, use the arrow keys to resize it or press Enter to reset it. The browser remembers your layout.
+
 Use the mouse wheel to zoom around the pointer, or enter a percentage at the right of the toolbar. At 100%, one image pixel corresponds to one screen pixel. Fit to Window calculates and displays the zoom percentage. Ctrl+0 fits the canvas to the window; Ctrl+1 returns to 100%. Hold Space while dragging, or drag with the middle mouse button, to pan without adding an undo step.
 
 Ctrl+Z | Undo
