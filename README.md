@@ -9,6 +9,7 @@
 ```sh
 pnpm install --frozen-lockfile
 pnpm typecheck
+pnpm test
 pnpm build
 ```
 
@@ -64,10 +65,17 @@ Remove-Item Env:NEXT_PUBLIC_SITE_URL
 
 TXT 中的 `#` 表示文档标题，`>` 表示副标题，`##` 表示章节标题。第一个章节为快速上手；每个操作步骤单独一行，以 `1.`、`2.` 等开头。后续章节用空行分隔段落。章节标题中的 `|` 后面是导航名称，快捷键行中的 `|` 两边分别是按键和说明。修改文字时保留这些标记。
 
-构建时该文件会原样复制到 **`out/help.txt`**，两个文件包均包含它。网站每次打开帮助时读取这个静态 TXT 文件，无需后台服务。只修改帮助文案时，可以单独替换已发布网站根目录中的 `help.txt`，也可以修改源码中的 `public/help.txt` 后重新构建、发布。若托管服务缓存了文件，发布后需要刷新或清除对应缓存。
+构建时该文件会原样复制到 **`out/help.txt`**。网站每次打开帮助时读取这个静态 TXT 文件，无需后台服务。只修改帮助文案时，可以单独替换已发布网站根目录中的 `help.txt`，也可以修改源码中的 `public/help.txt` 后重新构建、发布。若托管服务缓存了文件，发布后需要刷新或清除对应缓存。
 
 ## 修改应用信息
 
 APPLICATION INFORMATION 弹窗中的标题、应用名称、版本、更新时间、作者和技术来源等文案保存在 **`public/about.txt`**。可用记事本修改并保存为 UTF-8 编码，保留 `#`、`>`、`##` 和 `|` 标记。每项信息单独一行，`|` 左边为项目名称，右边为显示内容，例如 `Version | Ver.1.0`；可以修改、添加或删除项目。`#` 后是弹窗标题，`>` 后是副标题，`##` 后是标志下面的应用名称。
 
-构建时会原样生成 **`out/about.txt`**。网站每次打开应用信息时读取它；只修改这些文案时，可以单独替换发布目录中的 `about.txt`，无需重新构建。两个文件包均包含 `help.txt` 和 `about.txt` 对应文件。
+构建时会原样生成 **`out/about.txt`**。网站每次打开应用信息时读取它；只修改这些文案时，可以单独替换发布目录中的 `about.txt`，无需重新构建。
+
+## 目录与素材
+
+- `app/components/` 存放编辑器界面组件；`app/formats/` 存放 PNG、矩阵文本和工程的读写代码；`tests/` 存放回归测试。
+- `public/` 存放随网站发布的资源。当前标签页图标来自 `app/icon.svg`，旧 `public/favicon.svg` 保留原访问路径；`public/og.png` 用于分享预览。
+- `DLP images/` 保存原始实验 BMP，GitHub Pages 的构建和发布产物不包含该目录。原文件与路径保留，方便引用已有样本。
+- `.openai/hosting.json` 是历史 Sites 配置。GitHub Pages 由 `.github/workflows/pages.yml` 管理，两套部署入口各自独立。

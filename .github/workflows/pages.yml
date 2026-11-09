@@ -38,6 +38,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Run regression tests
+        run: pnpm test
+
       - name: Build static website
         run: pnpm build
         env:

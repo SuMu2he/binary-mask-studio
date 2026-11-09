@@ -1,67 +1,56 @@
 'use client';
 
-/* Large binary layer buffers are intentionally kept in refs and mutated inside
-   explicit document transactions to avoid cloning megabytes during render. */
-/* eslint-disable react-hooks/refs, react-hooks/immutability, react-hooks/exhaustive-deps */
-
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState, type CSSProperties } from 'react';
 import HelpDialog from './help-dialog';
 import AboutDialog from './about-dialog';
 import NumericInput, { validateNumericInputs } from './numeric-input';
 import { PanelSplitter, usePanelLayout } from './panel-layout';
+import { compositeTextChunks, parseMatrixText, readMatrixLayer, regionToText } from './formats/matrix';
+import { encodeMaskPng, readPngLayer } from './formats/png';
+import { deserializeProject, serializeProject } from './formats/project';
+import { createBlockPreviewRenderer, resizeCanvas } from './canvas-rendering';
+import { createLayerHistory, type HistorySnapshot } from './layer-history';
+import { useLinkedDimensions } from './linked-dimensions';
+import { clearPixelRegion, clipPixelBlock, writeClippedBlock } from './pixel-block';
+import { formatPixelSize, PIXEL_SIDE_UNITS_PER_INCH, type ResolutionMode } from './canvas-calibration';
+import { FieldSuffix, SectionHeading } from './components/editor-primitives';
+import { LayersPanel } from './components/layers-panel';
+import { MatrixEditorDialog, MATRIX_COLUMNS, MATRIX_ROWS, type MatrixScope, type MatrixView } from './components/matrix-editor-dialog';
+import { NewCanvasDialog } from './components/new-canvas-dialog';
+import { PixelInspector } from './components/pixel-inspector';
+import {
+  MAX_DIMENSION, OPAQUE_ONE, OPAQUE_ZERO, TRANSPARENT, isSupportedDpi,
+  type Layer, type LayerFill, type PixelSideUnit, type Selection,
+} from './mask-model';
 
 type ShapeKind = 'circle' | 'triangle' | 'rectangle';
 type ParametricKind = ShapeKind | 'text' | 'grating';
 type Tool = 'shape' | 'draw' | 'erase' | 'select' | 'move';
 type BooleanOperation = 'set1' | 'set0' | 'xor';
 type SizeUnit = 'px' | 'mm';
-type PixelSideUnit = 'um' | 'mm';
 type GratingWriteMode = 'cover' | 'lines';
 type GratingPolarity = 'line1' | 'line0';
 type TextFont = 'sans' | 'serif' | 'mono';
 type TextWeight = '400' | '700';
 type TextAlignment = 'left' | 'center' | 'right';
-type MatrixView = 'cells' | 'text';
-type MatrixScope = 'layer' | 'selection';
-type LayerFill = 0 | 1 | 2;
 type Point = { x: number; y: number };
 type Bounds = { minX: number; maxX: number; minY: number; maxY: number };
-type Selection = { x: number; y: number; width: number; height: number };
 type BinaryBlock = { width: number; height: number; pixels: Uint8Array };
 type MovePreview = BinaryBlock & Point & { source: Selection };
 type Quote = { content: string; source: string };
-type Layer = { id: string; name: string; pixels: Uint8Array; visible: boolean; locked: boolean };
-type LayerSnapshot = Omit<Layer, 'pixels'> & { pixels: Uint8Array };
-type HistorySnapshot = { layers: LayerSnapshot[]; activeLayerId: string; selectedLayerIds: string[] };
 type ShapeSpec = { kind: ShapeKind; centerX: number; centerY: number; sizeX: number; sizeY: number; projection: number; rotation: number };
 type TransformSpec = { centerX: number; centerY: number; rotation: number };
 type TextSpec = TransformSpec & { content: string; fontSize: number; font: TextFont; weight: TextWeight; lineHeight: number; letterSpacing: number; alignment: TextAlignment };
 type GratingSpec = TransformSpec & { width: number; height: number; period: number; duty: number; phase: number };
 type TextRun = { text: string; x: number; baseline: number };
 type TextLayout = { runs: TextRun[]; bounds: Bounds; width: number; height: number };
-type ProjectPayload = {
-  format: 'binary-mask-studio'; version: 1; width: number; height: number; dpi: number; activeLayerId: string;
-  pixelSizeUnit?: PixelSideUnit;
-  layers: Array<{ id: string; name: string; visible: boolean; locked: boolean; pixels: string }>;
-};
-
-const TRANSPARENT = 0;
-const OPAQUE_ZERO = 1;
-const OPAQUE_ONE = 2;
 const DEFAULT_WIDTH = 1920;
 const DEFAULT_HEIGHT = 1080;
 const DEFAULT_DPI = 300;
-const METERS_PER_INCH = 0.0254;
-const MIN_DPI = 1;
-const MAX_DPI = 0xffffffff * METERS_PER_INCH; // PNG pHYs stores an unsigned 32-bit pixels-per-meter value.
-const PIXEL_SIDE_UNITS_PER_INCH = { um: 25400, mm: 25.4 };
 const DEFAULT_SHAPE_SIZE = 300;
-const MAX_DIMENSION = 4096;
 const MIN_ZOOM = 2;
 const MAX_ZOOM = 1600;
 const HISTORY_BYTE_LIMIT = 128 * 1024 * 1024;
-const MATRIX_COLUMNS = 16;
-const MATRIX_ROWS = 10;
 const TEXT_FONTS: Record<TextFont, string> = {
   sans: '"Microsoft YaHei", "Noto Sans SC", Arial, sans-serif',
   serif: 'SimSun, "Songti SC", "Noto Serif SC", serif',
@@ -86,7 +75,7 @@ function createLayer(width: number, height: number, name: string, fill: LayerFil
   return { id: makeId(), name, pixels, visible: true, locked: false };
 }
 
-function cloneLayer(layer: Layer): LayerSnapshot {
+function cloneLayer(layer: Layer): Layer {
   return { ...layer, pixels: new Uint8Array(layer.pixels) };
 }
 
@@ -96,14 +85,6 @@ function toPixels(value: number, unit: SizeUnit, dpi: number) {
 
 function fromPixels(value: number, unit: SizeUnit, dpi: number) {
   return unit === 'px' ? value : (value / dpi) * 25.4;
-}
-
-function formatPixelSize(value: number) {
-  return value < 0.01 ? value.toExponential(2) : value.toFixed(2);
-}
-
-function isSupportedDpi(value: number) {
-  return Number.isFinite(value) && value >= MIN_DPI && value <= MAX_DPI;
 }
 
 function localToWorld(point: Point, spec: TransformSpec): Point {
@@ -397,138 +378,6 @@ function compositeLayers(layers: Layer[], width: number, height: number) {
   return { pixels, resolved };
 }
 
-function regionToText(pixels: Uint8Array, canvasWidth: number, region: Selection) {
-  const rows: string[] = [];
-  for (let y = 0; y < region.height; y += 1) {
-    const values = new Array<string>(region.width);
-    for (let x = 0; x < region.width; x += 1) {
-      const value = pixels[(region.y + y) * canvasWidth + region.x + x];
-      values[x] = value === OPAQUE_ONE ? '1' : value === OPAQUE_ZERO ? '0' : '·';
-    }
-    rows.push(values.join(' '));
-  }
-  return rows.join('\n');
-}
-
-function parseMatrixText(text: string) {
-  const cleaned = text.trim().replace(/^\s*\[/, '').replace(/\]\s*$/, '');
-  const lines = cleaned.split(/[;\r\n]+/).map((line) => line.trim()).filter(Boolean);
-  if (!lines.length) throw new Error('No matrix data found.');
-  const rows = lines.map((line, rowIndex) => {
-    const compact = line.replace(/[\s,]/g, '');
-    const values = /^[01.·]+$/.test(compact) ? compact.split('') : line.split(/[\s,]+/).filter(Boolean);
-    const valid = values.every((value) => value === '0' || value === '1' || value === 'null' || value === '.' || value === '·');
-    if (!values.length || !valid) throw new Error(`Row ${rowIndex + 1} contains unsupported content.`);
-    return values.map((value) => value === '1' ? OPAQUE_ONE : value === '0' ? OPAQUE_ZERO : TRANSPARENT);
-  });
-  const matrixWidth = rows[0].length;
-  if (rows.some((row) => row.length !== matrixWidth)) throw new Error('Every matrix row must have the same number of columns.');
-  if (matrixWidth > MAX_DIMENSION || rows.length > MAX_DIMENSION) throw new Error(`The matrix must not exceed ${MAX_DIMENSION} × ${MAX_DIMENSION}.`);
-  return rows;
-}
-
-function layerToText(pixels: Uint8Array, width: number, height: number) {
-  const rows: string[] = [];
-  for (let y = 0; y < height; y += 1) {
-    const values = new Array<string>(width);
-    for (let x = 0; x < width; x += 1) {
-      const value = pixels[y * width + x];
-      values[x] = value === OPAQUE_ONE ? '1' : value === OPAQUE_ZERO ? '0' : '·';
-    }
-    rows.push(values.join(' '));
-  }
-  return rows.join('\n');
-}
-
-function compositeToText({ pixels, resolved }: ReturnType<typeof compositeLayers>, width: number, height: number, separator: string, preserveTransparency: boolean) {
-  const rows: string[] = [];
-  for (let y = 0; y < height; y += 1) {
-    const values = new Array<string>(width);
-    for (let x = 0; x < width; x += 1) {
-      const index = y * width + x;
-      values[x] = preserveTransparency && !resolved[index] ? 'null' : pixels[index] ? '1' : '0';
-    }
-    rows.push(values.join(separator));
-  }
-  return rows.join('\n');
-}
-
-function bytesToBase64(bytes: Uint8Array) {
-  let binary = '';
-  for (let offset = 0; offset < bytes.length; offset += 0x8000) binary += String.fromCharCode(...bytes.subarray(offset, Math.min(bytes.length, offset + 0x8000)));
-  return btoa(binary);
-}
-
-function base64ToBytes(value: string) {
-  const binary = atob(value);
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-  return bytes;
-}
-
-function uint32(value: number) {
-  return new Uint8Array([(value >>> 24) & 255, (value >>> 16) & 255, (value >>> 8) & 255, value & 255]);
-}
-
-const CRC_TABLE = (() => {
-  const table = new Uint32Array(256);
-  for (let n = 0; n < 256; n += 1) {
-    let c = n;
-    for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-    table[n] = c >>> 0;
-  }
-  return table;
-})();
-
-function crc32(bytes: Uint8Array) {
-  let crc = 0xffffffff;
-  for (const byte of bytes) crc = CRC_TABLE[(crc ^ byte) & 255] ^ (crc >>> 8);
-  return (crc ^ 0xffffffff) >>> 0;
-}
-
-function concatBytes(parts: Uint8Array[]) {
-  const result = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0));
-  let offset = 0;
-  for (const part of parts) { result.set(part, offset); offset += part.length; }
-  return result;
-}
-
-function pngChunk(type: string, data: Uint8Array) {
-  const typeBytes = new TextEncoder().encode(type);
-  return concatBytes([uint32(data.length), typeBytes, data, uint32(crc32(concatBytes([typeBytes, data])))]);
-}
-
-async function encodeMaskPng({ pixels, resolved }: ReturnType<typeof compositeLayers>, width: number, height: number, dpi: number, preserveTransparency: boolean) {
-  const hasTransparency = preserveTransparency && resolved.includes(0);
-  const bitDepth = hasTransparency ? 2 : 1;
-  const samplesPerByte = 8 / bitDepth;
-  const rowBytes = Math.ceil(width / samplesPerByte);
-  const raw = new Uint8Array(height * (rowBytes + 1));
-  for (let y = 0; y < height; y += 1) {
-    const targetRow = y * (rowBytes + 1) + 1;
-    for (let x = 0; x < width; x += 1) {
-      const index = y * width + x;
-      // Palette indices 0, 1 and 2 denote transparent, black and white.
-      const sample = hasTransparency ? (resolved[index] ? pixels[index] + 1 : 0) : pixels[index];
-      const shift = 8 - bitDepth * (x % samplesPerByte + 1);
-      raw[targetRow + Math.floor(x / samplesPerByte)] |= sample << shift;
-    }
-  }
-  const compressedStream = new Blob([raw]).stream().pipeThrough(new CompressionStream('deflate'));
-  const compressed = new Uint8Array(await new Response(compressedStream).arrayBuffer());
-  const header = concatBytes([uint32(width), uint32(height), new Uint8Array([bitDepth, hasTransparency ? 3 : 0, 0, 0, 0])]);
-  const palette = hasTransparency ? [
-    pngChunk('PLTE', new Uint8Array([0, 0, 0, 0, 0, 0, 255, 255, 255])),
-    pngChunk('tRNS', new Uint8Array([0])),
-  ] : [];
-  const pixelsPerMeter = Math.round(dpi / METERS_PER_INCH);
-  const physical = concatBytes([uint32(pixelsPerMeter), uint32(pixelsPerMeter), new Uint8Array([1])]);
-  return new Blob([concatBytes([
-    new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]), pngChunk('IHDR', header),
-    ...palette, pngChunk('pHYs', physical), pngChunk('IDAT', compressed), pngChunk('IEND', new Uint8Array()),
-  ])], { type: 'image/png' });
-}
-
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -540,13 +389,6 @@ function LinkIcon() {
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.2 13.8a4.5 4.5 0 0 0 6.4.1l2.3-2.3a4.5 4.5 0 0 0-6.4-6.4l-1.3 1.3" /><path d="M13.8 10.2a4.5 4.5 0 0 0-6.4-.1l-2.3 2.3a4.5 4.5 0 0 0 6.4 6.4l1.3-1.3" /></svg>;
 }
 
-function EyeIcon({ open }: { open: boolean }) {
-  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d={open ? 'M2.6 12s3.5-6 9.4-6 9.4 6 9.4 6-3.5 6-9.4 6-9.4-6-9.4-6Z' : 'M3 3l18 18M10.6 6.1A9.8 9.8 0 0 1 12 6c5.9 0 9.4 6 9.4 6a15.7 15.7 0 0 1-2.2 2.9M6.2 6.2C3.9 8 2.6 12 2.6 12s3.5 6 9.4 6c1.4 0 2.6-.3 3.7-.8'} /><circle cx="12" cy="12" r="2.5" /></svg>;
-}
-
-function LockIcon({ locked }: { locked: boolean }) {
-  return <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2" /><path d={locked ? 'M8 10V7a4 4 0 0 1 8 0v3' : 'M16 10V7a4 4 0 0 0-7.7-1.5'} /></svg>;
-}
 
 function EraserIcon() {
   return <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m13.5 3.5-11 10a2.1 2.1 0 0 0 0 3L6 20h5l9.5-9.5a2.1 2.1 0 0 0 0-3l-4-4a2.1 2.1 0 0 0-3 0Z" /><path d="m7 9 8 8M11 20h10" /></svg>;
@@ -579,41 +421,15 @@ async function fetchRandomQuote() {
   }
 }
 
-function LayerThumbnail({ layer, width, height, version }: { layer: Layer; width: number; height: number; version: number }) {
-  const ref = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    const canvas = ref.current; if (!canvas) return;
-    const context = canvas.getContext('2d'); if (!context) return;
-    const image = context.createImageData(canvas.width, canvas.height);
-    for (let y = 0; y < canvas.height; y += 1) for (let x = 0; x < canvas.width; x += 1) {
-      const sourceX = Math.min(width - 1, Math.floor((x / canvas.width) * width));
-      const sourceY = Math.min(height - 1, Math.floor((y / canvas.height) * height));
-      const state = layer.pixels[sourceY * width + sourceX];
-      const index = (y * canvas.width + x) * 4;
-      const checker = (Math.floor(x / 5) + Math.floor(y / 5)) % 2 ? 222 : 244;
-      const value = state === OPAQUE_ONE ? 255 : state === OPAQUE_ZERO ? 0 : checker;
-      image.data[index] = value; image.data[index + 1] = value; image.data[index + 2] = value; image.data[index + 3] = 255;
-    }
-    context.putImageData(image, 0, 0);
-  }, [height, layer, version, width]);
-  return <canvas ref={ref} width={54} height={32} aria-hidden="true" />;
-}
 
-function SectionHeading({ number, title }: { number: string; title: string }) {
-  return <h2 className="panel-heading"><span>{number}</span>{title}</h2>;
-}
-
-function FieldSuffix({ children }: { children: React.ReactNode }) { return <span className="field-suffix">{children}</span>; }
 
 export default function Home() {
-  const layout = usePanelLayout();
-  const initialLayerRef = useRef<Layer | null>(null);
-  if (!initialLayerRef.current) {
-    const layer = createLayer(DEFAULT_WIDTH, DEFAULT_HEIGHT, 'Layer 1');
-    initialLayerRef.current = layer;
-  }
-  const layersRef = useRef<Layer[]>([initialLayerRef.current]);
+  const { workspaceRef, leftRef, rightRef, style: workspaceStyle, canvas: canvasSplitter,
+    left: leftSplitter, right: rightSplitter, layers: layersSplitter } = usePanelLayout();
+  const [initialLayer] = useState(() => createLayer(DEFAULT_WIDTH, DEFAULT_HEIGHT, 'Layer 1'));
+  const layersRef = useRef<Layer[]>([initialLayer]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const compositeImageRef = useRef<ImageData | null>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const canvasFrameRef = useRef<HTMLDivElement>(null);
@@ -622,7 +438,6 @@ export default function Home() {
   const shapeFieldsRef = useRef<HTMLElement>(null);
   const newCanvasFieldsRef = useRef<HTMLElement>(null);
   const matrixFieldsRef = useRef<HTMLElement>(null);
-  const layerCreateRef = useRef<HTMLDivElement>(null);
   const drawingRef = useRef(false);
   const lastPointRef = useRef<Point | null>(null);
   const selectionStartRef = useRef<Point | null>(null);
@@ -631,6 +446,8 @@ export default function Home() {
   const dirtyRef = useRef(false);
   const undoRef = useRef<HistorySnapshot[]>([]);
   const redoRef = useRef<HistorySnapshot[]>([]);
+  const [layerHistory] = useState(createLayerHistory);
+  const [renderBlockPreview] = useState(createBlockPreviewRenderer);
   const matrixDraftRef = useRef<Uint8Array | null>(null);
   const pendingZoomAnchorRef = useRef<{ x: number; y: number; clientX: number; clientY: number } | null>(null);
   const appliedAutoFitRequestRef = useRef(-1);
@@ -642,10 +459,10 @@ export default function Home() {
   const [height, setHeight] = useState(DEFAULT_HEIGHT);
   const [dpi, setDpi] = useState(DEFAULT_DPI);
   const [canvasPixelSizeUnit, setCanvasPixelSizeUnit] = useState<PixelSideUnit | null>(null);
-  const [docVersion, setDocVersion] = useState(1);
-  const [historyVersion, setHistoryVersion] = useState(0);
-  const [activeLayerId, setActiveLayerId] = useState(initialLayerRef.current.id);
-  const [selectedLayerIds, setSelectedLayerIds] = useState<string[]>([initialLayerRef.current.id]);
+  const [documentView, setDocumentView] = useState({ layers: [initialLayer], version: 1 });
+  const [historyView, setHistoryView] = useState({ version: 0, canUndo: false, canRedo: false });
+  const [activeLayerId, setActiveLayerId] = useState(initialLayer.id);
+  const [selectedLayerIds, setSelectedLayerIds] = useState<string[]>([initialLayer.id]);
   const [dragLayerId, setDragLayerId] = useState<string | null>(null);
   const [tool, setTool] = useState<Tool>('shape');
   const [brushSize, setBrushSize] = useState(12);
@@ -654,10 +471,8 @@ export default function Home() {
   const [shape, setShape] = useState<ParametricKind>('circle');
   const [centerX, setCenterX] = useState(DEFAULT_WIDTH / 2);
   const [centerY, setCenterY] = useState(DEFAULT_HEIGHT / 2);
-  const [dimensionX, setDimensionX] = useState(DEFAULT_SHAPE_SIZE);
-  const [dimensionY, setDimensionY] = useState(DEFAULT_SHAPE_SIZE);
-  const [aspectLinked, setAspectLinked] = useState(true);
-  const [aspectRatio, setAspectRatio] = useState(1);
+  const { x: dimensionX, y: dimensionY, setX: setDimensionX, setY: setDimensionY, linked: aspectLinked,
+    toggle: toggleAspect, updateX: updateDimensionX, updateY: updateDimensionY } = useLinkedDimensions(DEFAULT_SHAPE_SIZE, DEFAULT_SHAPE_SIZE);
   const [triangleBase, setTriangleBase] = useState(DEFAULT_SHAPE_SIZE);
   const [triangleHeight, setTriangleHeight] = useState((DEFAULT_SHAPE_SIZE * Math.sqrt(3)) / 2);
   const [triangleProjection, setTriangleProjection] = useState(DEFAULT_SHAPE_SIZE / 2);
@@ -669,10 +484,8 @@ export default function Home() {
   const [textLineHeight, setTextLineHeight] = useState(1.2);
   const [textLetterSpacing, setTextLetterSpacing] = useState(0);
   const [textAlignment, setTextAlignment] = useState<TextAlignment>('center');
-  const [gratingWidth, setGratingWidth] = useState(200);
-  const [gratingHeight, setGratingHeight] = useState(200);
-  const [gratingAspectLinked, setGratingAspectLinked] = useState(true);
-  const [gratingAspectRatio, setGratingAspectRatio] = useState(1);
+  const { x: gratingWidth, y: gratingHeight, setX: setGratingWidth, setY: setGratingHeight, linked: gratingAspectLinked,
+    toggle: toggleGratingAspect, updateX: updateGratingWidth, updateY: updateGratingHeight } = useLinkedDimensions(200, 200);
   const [gratingPeriod, setGratingPeriod] = useState(20);
   const [gratingDuty, setGratingDuty] = useState(50);
   const [gratingPhase, setGratingPhase] = useState(0);
@@ -695,16 +508,15 @@ export default function Home() {
   const [matrixView, setMatrixView] = useState<MatrixView>('cells');
   const [matrixScope, setMatrixScope] = useState<MatrixScope>('layer');
   const [matrixText, setMatrixText] = useState('');
-  const [matrixDraftVersion, setMatrixDraftVersion] = useState(0);
+  const [matrixDraftView, setMatrixDraftView] = useState<{ pixels: Uint8Array | null; version: number }>({ pixels: null, version: 0 });
   const [matrixStartX, setMatrixStartX] = useState(0);
   const [matrixStartY, setMatrixStartY] = useState(0);
   const [newCanvasOpen, setNewCanvasOpen] = useState(false);
   const [newWidth, setNewWidth] = useState(DEFAULT_WIDTH);
   const [newHeight, setNewHeight] = useState(DEFAULT_HEIGHT);
   const [newDpi, setNewDpi] = useState(DEFAULT_DPI);
-  const [newResolutionMode, setNewResolutionMode] = useState<'dpi' | 'pixel'>('dpi');
+  const [newResolutionMode, setNewResolutionMode] = useState<ResolutionMode>('dpi');
   const [newPixelSideUnit, setNewPixelSideUnit] = useState<PixelSideUnit>('um');
-  const [layerCreateMenuOpen, setLayerCreateMenuOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [quote, setQuote] = useState<Quote>(BUILT_IN_QUOTES[0]);
@@ -716,11 +528,25 @@ export default function Home() {
   const [toast, setToast] = useState('Ready with a blank 1920 × 1080 canvas. Start editing or create a new canvas.');
 
   const setDocumentDirty = (value: boolean) => { dirtyRef.current = value; setDirty(value); };
-  const bumpDocument = (markDirty = true) => { setDocVersion((value) => value + 1); if (markDirty) setDocumentDirty(true); };
-  const bumpHistory = () => setHistoryVersion((value) => value + 1);
-  const activeLayer = layersRef.current.find((layer) => layer.id === activeLayerId) ?? layersRef.current[0];
+  const bumpDocument = (markDirty = true) => {
+    const layers = layersRef.current.map((layer) => ({ ...layer }));
+    setDocumentView((current) => ({ layers, version: current.version + 1 }));
+    if (markDirty) setDocumentDirty(true);
+  };
+  const bumpHistory = () => {
+    const canUndo = undoRef.current.length > 0;
+    const canRedo = redoRef.current.length > 0;
+    setHistoryView((current) => ({ version: current.version + 1, canUndo, canRedo }));
+  };
+  const bumpMatrixDraft = () => {
+    const pixels = matrixDraftRef.current;
+    setMatrixDraftView((current) => ({ pixels, version: current.version + 1 }));
+  };
+  const { layers: layerList, version: docVersion } = documentView;
+  const activeLayer = layerList.find((layer) => layer.id === activeLayerId) ?? layerList[0];
+  const getActiveLayer = () => layersRef.current.find((layer) => layer.id === activeLayerId) ?? layersRef.current[0];
   const selectedSet = useMemo(() => new Set(selectedLayerIds), [selectedLayerIds]);
-  const compositeData = useMemo(() => compositeLayers(layersRef.current, width, height), [docVersion, height, width]);
+  const compositeData = useMemo(() => compositeLayers(layerList, width, height), [layerList, height, width]);
   const composite = compositeData.pixels;
   const compositeResolved = compositeData.resolved;
   const whitePixels = useMemo(() => { let count = 0; for (const value of composite) count += value; return count; }, [composite]);
@@ -731,11 +557,6 @@ export default function Home() {
   const canvasResolutionLabel = canvasPixelSizeUnit ? 'Pixel size' : 'DPI';
   const canvasResolutionValue = canvasPixelSizeUnit ? formatPixelSize(PIXEL_SIDE_UNITS_PER_INCH[canvasPixelSizeUnit] / dpi) : dpi.toFixed(2);
   const canvasResolutionUnit = canvasPixelSizeUnit === 'um' ? 'μm' : canvasPixelSizeUnit ?? 'DPI';
-  const unitsPerInch = PIXEL_SIDE_UNITS_PER_INCH[newPixelSideUnit];
-  const minPixelSide = unitsPerInch / MAX_DPI;
-  const maxPixelSide = unitsPerInch / MIN_DPI;
-  const displayedNewDpi = newDpi.toFixed(2);
-  const newPixelSide = Math.min(maxPixelSide, Math.max(minPixelSide, unitsPerInch / newDpi));
   const resolvedTriangleHeight = equilateral ? (triangleBase * Math.sqrt(3)) / 2 : triangleHeight;
   const resolvedTriangleProjection = equilateral ? triangleBase / 2 : triangleProjection;
   const geometryKind: ShapeKind = shape === 'text' || shape === 'grating' ? 'rectangle' : shape;
@@ -774,7 +595,7 @@ export default function Home() {
     : !clippedRange.hasIntersection ? `${parametricLabel} is entirely outside the canvas.`
       : partiallyOutside ? 'Out-of-bounds areas will be clipped when applied.' : '';
 
-  const snapshotCurrent = (): HistorySnapshot => ({ layers: layersRef.current.map(cloneLayer), activeLayerId, selectedLayerIds: [...selectedLayerIds] });
+  const snapshotCurrent = () => layerHistory.snapshot(layersRef.current, activeLayerId, selectedLayerIds);
   const snapshotBytes = (snapshot: HistorySnapshot) => snapshot.layers.reduce((sum, layer) => sum + layer.pixels.byteLength, 0);
   const pushHistory = () => {
     undoRef.current.push(snapshotCurrent());
@@ -783,7 +604,7 @@ export default function Home() {
     redoRef.current = []; bumpHistory();
   };
   const restoreSnapshot = (snapshot: HistorySnapshot) => {
-    layersRef.current = snapshot.layers.map(cloneLayer);
+    layersRef.current = layerHistory.restore(snapshot);
     const restoredActive = layersRef.current.some((layer) => layer.id === snapshot.activeLayerId) ? snapshot.activeLayerId : layersRef.current[0].id;
     setActiveLayerId(restoredActive);
     const validSelected = snapshot.selectedLayerIds.filter((id) => layersRef.current.some((layer) => layer.id === id));
@@ -792,7 +613,13 @@ export default function Home() {
   };
   const undo = () => { const previous = undoRef.current.pop(); if (!previous) return; redoRef.current.push(snapshotCurrent()); restoreSnapshot(previous); };
   const redo = () => { const next = redoRef.current.pop(); if (!next) return; undoRef.current.push(snapshotCurrent()); restoreSnapshot(next); };
-  const requireEditableLayer = () => { if (!activeLayer) return false; if (!activeLayer.locked) return true; setToast('The current layer is locked. Unlock it first.'); return false; };
+  const getEditableLayer = () => {
+    const layer = getActiveLayer();
+    if (!layer) return null;
+    if (!layer.locked) return layer;
+    setToast('The current layer is locked. Unlock it first.');
+    return null;
+  };
   const resetHistory = () => { undoRef.current = []; redoRef.current = []; bumpHistory(); };
   const scheduleDocumentBump = () => {
     if (paintFrameRef.current !== null) return;
@@ -804,11 +631,11 @@ export default function Home() {
     await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
     try { await task(); } finally { setProcessing(''); }
   };
-  const prefetchRandomQuote = () => {
+  const prefetchRandomQuote = useCallback(() => {
     if (quoteFetchPendingRef.current || queuedQuoteRef.current) return;
     quoteFetchPendingRef.current = true;
     void fetchRandomQuote().then((onlineQuote) => { if (onlineQuote) queuedQuoteRef.current = onlineQuote; }).finally(() => { quoteFetchPendingRef.current = false; });
-  };
+  }, []);
   const openInfoWindow = (kind: 'help' | 'about') => {
     setQuote(queuedQuoteRef.current ?? randomBuiltInQuote());
     queuedQuoteRef.current = null;
@@ -817,15 +644,7 @@ export default function Home() {
   };
 
   useEffect(() => () => { if (paintFrameRef.current !== null) window.cancelAnimationFrame(paintFrameRef.current); }, []);
-  useEffect(() => { prefetchRandomQuote(); }, []);
-  useEffect(() => {
-    if (!layerCreateMenuOpen) return;
-    const closeOnOutsidePointer = (event: PointerEvent) => { if (!layerCreateRef.current?.contains(event.target as Node)) setLayerCreateMenuOpen(false); };
-    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') setLayerCreateMenuOpen(false); };
-    window.addEventListener('pointerdown', closeOnOutsidePointer, true);
-    window.addEventListener('keydown', closeOnEscape);
-    return () => { window.removeEventListener('pointerdown', closeOnOutsidePointer, true); window.removeEventListener('keydown', closeOnEscape); };
-  }, [layerCreateMenuOpen]);
+  useEffect(() => { prefetchRandomQuote(); }, [prefetchRandomQuote]);
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       if (!dirtyRef.current) return;
@@ -837,9 +656,13 @@ export default function Home() {
   }, []);
   useEffect(() => {
     const canvas = canvasRef.current; if (!canvas) return;
-    canvas.width = width; canvas.height = height;
+    resizeCanvas(canvas, width, height);
     const context = canvas.getContext('2d'); if (!context) return;
-    const image = context.createImageData(width, height);
+    let image = compositeImageRef.current;
+    if (!image || image.width !== width || image.height !== height) {
+      image = context.createImageData(width, height);
+      compositeImageRef.current = image;
+    }
     for (let index = 0; index < composite.length; index += 1) {
       const pixelX = index % width; const pixelY = Math.floor(index / width);
       const checker = (Math.floor(pixelX / 12) + Math.floor(pixelY / 12)) % 2 ? 212 : 239;
@@ -849,9 +672,10 @@ export default function Home() {
     context.putImageData(image, 0, 0);
   }, [composite, compositeResolved, height, width]);
 
+  const brushCursor = (tool === 'draw' || tool === 'erase') && !pastePreview && !movePreview ? cursor : null;
   useEffect(() => {
     const canvas = overlayRef.current; if (!canvas) return;
-    canvas.width = width; canvas.height = height;
+    resizeCanvas(canvas, width, height);
     const context = canvas.getContext('2d'); if (!context) return;
     context.clearRect(0, 0, width, height);
     context.lineWidth = Math.max(1.5, width / 900);
@@ -889,47 +713,19 @@ export default function Home() {
       context.fillRect(activeSelection.x, activeSelection.y, activeSelection.width, activeSelection.height);
       context.strokeRect(activeSelection.x, activeSelection.y, activeSelection.width, activeSelection.height); context.restore();
     }
-    if (pastePreview) {
-      const temporary = document.createElement('canvas'); temporary.width = pastePreview.width; temporary.height = pastePreview.height;
-      const temporaryContext = temporary.getContext('2d');
-      if (temporaryContext) {
-        const image = temporaryContext.createImageData(pastePreview.width, pastePreview.height);
-        for (let index = 0; index < pastePreview.pixels.length; index += 1) {
-          const state = pastePreview.pixels[index]; const target = index * 4;
-          if (state === TRANSPARENT) { image.data[target + 3] = 0; continue; }
-          const value = state === OPAQUE_ONE ? 255 : 0;
-          image.data[target] = value; image.data[target + 1] = value; image.data[target + 2] = value; image.data[target + 3] = 190;
-        }
-        temporaryContext.putImageData(image, 0, 0); context.drawImage(temporary, pastePreview.x, pastePreview.y);
-      }
-      context.save(); context.strokeStyle = '#ff8b7f'; context.strokeRect(pastePreview.x, pastePreview.y, pastePreview.width, pastePreview.height); context.restore();
-    }
-    if (movePreview) {
-      const temporary = document.createElement('canvas'); temporary.width = movePreview.width; temporary.height = movePreview.height;
-      const temporaryContext = temporary.getContext('2d');
-      if (temporaryContext) {
-        const image = temporaryContext.createImageData(movePreview.width, movePreview.height);
-        for (let index = 0; index < movePreview.pixels.length; index += 1) {
-          const state = movePreview.pixels[index]; const target = index * 4;
-          if (state === TRANSPARENT) { image.data[target + 3] = 0; continue; }
-          const value = state === OPAQUE_ONE ? 255 : 0;
-          image.data[target] = value; image.data[target + 1] = value; image.data[target + 2] = value; image.data[target + 3] = 220;
-        }
-        temporaryContext.putImageData(image, 0, 0); context.drawImage(temporary, movePreview.x, movePreview.y);
-      }
-      context.save(); context.strokeStyle = '#ff8b7f'; context.strokeRect(movePreview.x, movePreview.y, movePreview.width, movePreview.height); context.restore();
-    }
-    if ((tool === 'draw' || tool === 'erase') && !pastePreview && !movePreview) {
+    if (pastePreview) renderBlockPreview(context, pastePreview, 190);
+    if (movePreview) renderBlockPreview(context, movePreview, 220);
+    if (brushCursor) {
       const radius = Math.max(.5, brushSize / 2);
       context.save(); context.setLineDash([]); context.lineWidth = Math.max(1, width / 1200);
-      context.beginPath(); context.arc(cursor.x + .5, cursor.y + .5, radius, 0, Math.PI * 2); context.strokeStyle = '#fff'; context.stroke();
+      context.beginPath(); context.arc(brushCursor.x + .5, brushCursor.y + .5, radius, 0, Math.PI * 2); context.strokeStyle = '#fff'; context.stroke();
       context.lineWidth *= 2.6; context.globalCompositeOperation = 'destination-over'; context.strokeStyle = '#111'; context.stroke(); context.globalCompositeOperation = 'source-over';
-      context.beginPath(); context.arc(cursor.x + .5, cursor.y + .5, Math.max(1.5, Math.min(radius * .32, width / 220)), 0, Math.PI * 2);
+      context.beginPath(); context.arc(brushCursor.x + .5, brushCursor.y + .5, Math.max(1.5, Math.min(radius * .32, width / 220)), 0, Math.PI * 2);
       context.fillStyle = tool === 'erase' ? 'rgba(255,255,255,.78)' : paintValue ? '#fff' : '#000'; context.fill(); context.strokeStyle = tool === 'erase' ? '#d6574d' : paintValue ? '#111' : '#fff'; context.lineWidth = Math.max(1, width / 1500); context.stroke();
-      if (tool === 'erase') { context.beginPath(); context.moveTo(cursor.x - radius * .34, cursor.y + radius * .34); context.lineTo(cursor.x + radius * .34, cursor.y - radius * .34); context.strokeStyle = '#d6574d'; context.stroke(); }
+      if (tool === 'erase') { context.beginPath(); context.moveTo(brushCursor.x - radius * .34, brushCursor.y + radius * .34); context.lineTo(brushCursor.x + radius * .34, brushCursor.y - radius * .34); context.strokeStyle = '#d6574d'; context.stroke(); }
       context.restore();
     }
-  }, [brushSize, centerX, centerY, cursor, gratingSpec, hasParametricContent, height, movePreview, paintValue, partiallyOutside, pastePreview, rotation, selection, selectionDraft, shape, shapeSpec, sizeX, sizeY, textFontSizePixels, textSpec, tool, width, zoom]);
+  }, [brushCursor, brushSize, centerX, centerY, gratingSpec, hasParametricContent, height, movePreview, paintValue, partiallyOutside, pastePreview, renderBlockPreview, rotation, selection, selectionDraft, shape, shapeSpec, sizeX, sizeY, textFontSizePixels, textSpec, tool, width, zoom]);
 
   useEffect(() => { if (!toast) return; const timeout = window.setTimeout(() => setToast(''), 3200); return () => window.clearTimeout(timeout); }, [toast]);
   useEffect(() => {
@@ -961,19 +757,20 @@ export default function Home() {
     const rect = event.currentTarget.getBoundingClientRect();
     return { x: Math.max(0, Math.min(width - 1, Math.floor(((event.clientX - rect.left) / rect.width) * width))), y: Math.max(0, Math.min(height - 1, Math.floor(((event.clientY - rect.top) / rect.height) * height))) };
   };
-  const paintPoint = (x: number, y: number) => {
-    if (!activeLayer) return; const radius = Math.max(0.5, brushSize / 2);
+  const paintPoint = (pixels: Uint8Array, x: number, y: number) => {
+    const radius = Math.max(0.5, brushSize / 2);
     const minX = Math.max(0, Math.floor(x - radius)); const maxX = Math.min(width - 1, Math.ceil(x + radius));
     const minY = Math.max(0, Math.floor(y - radius)); const maxY = Math.min(height - 1, Math.ceil(y + radius));
     for (let py = minY; py <= maxY; py += 1) for (let px = minX; px <= maxX; px += 1) {
       if ((px - x) ** 2 + (py - y) ** 2 > radius ** 2) continue;
       if (selection && (px < selection.x || px >= selection.x + selection.width || py < selection.y || py >= selection.y + selection.height)) continue;
-      activeLayer.pixels[py * width + px] = tool === 'erase' ? TRANSPARENT : paintValue ? OPAQUE_ONE : OPAQUE_ZERO;
+      pixels[py * width + px] = tool === 'erase' ? TRANSPARENT : paintValue ? OPAQUE_ONE : OPAQUE_ZERO;
     }
   };
   const paintSegment = (from: Point, to: Point) => {
+    const pixels = layerHistory.writablePixels(getActiveLayer());
     const steps = Math.max(Math.abs(to.x - from.x), Math.abs(to.y - from.y), 1);
-    for (let step = 0; step <= steps; step += 1) paintPoint(Math.round(from.x + ((to.x - from.x) * step) / steps), Math.round(from.y + ((to.y - from.y) * step) / steps));
+    for (let step = 0; step <= steps; step += 1) paintPoint(pixels, Math.round(from.x + ((to.x - from.x) * step) / steps), Math.round(from.y + ((to.y - from.y) * step) / steps));
     scheduleDocumentBump();
   };
   const selectionFromPoints = (start: Point, end: Point): Selection => ({ x: Math.min(start.x, end.x), y: Math.min(start.y, end.y), width: Math.abs(start.x - end.x) + 1, height: Math.abs(start.y - end.y) + 1 });
@@ -981,28 +778,30 @@ export default function Home() {
   const selectAll = () => { setSelection({ x: 0, y: 0, width, height }); setTool('select'); };
   const deselect = () => { setSelection(null); setSelectionDraft(null); setMovePreview(null); };
   const clearSelection = () => {
-    if (!selection || !requireEditableLayer()) return;
+    if (!selection) return;
+    const layer = getEditableLayer();
+    if (!layer) return;
     pushHistory();
-    for (let y = selection.y; y < selection.y + selection.height; y += 1) activeLayer.pixels.fill(TRANSPARENT, y * width + selection.x, y * width + selection.x + selection.width);
+    clearPixelRegion(layerHistory.writablePixels(layer), width, selection);
     bumpDocument(); setToast('The selection in the current layer has been cleared to transparent.');
   };
   const beginMove = () => {
     if (!selection) { setToast('Create a rectangular selection first.'); return; }
-    if (!requireEditableLayer()) return;
+    const layer = getEditableLayer();
+    if (!layer) return;
     const pixels = new Uint8Array(selection.width * selection.height);
-    for (let y = 0; y < selection.height; y += 1) pixels.set(activeLayer.pixels.subarray((selection.y + y) * width + selection.x, (selection.y + y) * width + selection.x + selection.width), y * selection.width);
+    for (let y = 0; y < selection.height; y += 1) pixels.set(layer.pixels.subarray((selection.y + y) * width + selection.x, (selection.y + y) * width + selection.x + selection.width), y * selection.width);
     setMovePreview({ ...selection, source: selection, pixels }); setPastePreview(null); setTool('move');
   };
   const confirmMove = () => {
-    if (!movePreview || !requireEditableLayer()) return false;
+    if (!movePreview) return false;
+    const layer = getEditableLayer();
+    if (!layer) return false;
     pushHistory();
-    const source = movePreview.source;
-    for (let y = source.y; y < source.y + source.height; y += 1) activeLayer.pixels.fill(TRANSPARENT, y * width + source.x, y * width + source.x + source.width);
-    for (let sy = 0; sy < movePreview.height; sy += 1) for (let sx = 0; sx < movePreview.width; sx += 1) {
-      const x = movePreview.x + sx; const y = movePreview.y + sy;
-      if (x < 0 || x >= width || y < 0 || y >= height) continue;
-      activeLayer.pixels[y * width + x] = movePreview.pixels[sy * movePreview.width + sx];
-    }
+    const pixels = layerHistory.writablePixels(layer);
+    clearPixelRegion(pixels, width, movePreview.source);
+    const clipped = clipPixelBlock(movePreview, width, height);
+    if (clipped) writeClippedBlock(pixels, width, movePreview, clipped);
     setSelection(null);
     setMovePreview(null); bumpDocument(); setToast('The selection has been moved within the current layer. Out-of-bounds areas were clipped.');
     return true;
@@ -1021,15 +820,13 @@ export default function Home() {
   };
 
   const confirmPaste = () => {
-    if (!pastePreview || !requireEditableLayer()) return;
-    const minX = Math.max(0, pastePreview.x); const minY = Math.max(0, pastePreview.y);
-    const maxX = Math.min(width - 1, pastePreview.x + pastePreview.width - 1); const maxY = Math.min(height - 1, pastePreview.y + pastePreview.height - 1);
-    if (minX > maxX || minY > maxY) { setToast('The pasted block is entirely outside the canvas and cannot be placed.'); return; }
+    if (!pastePreview) return;
+    const layer = getEditableLayer();
+    if (!layer) return;
+    const clipped = clipPixelBlock(pastePreview, width, height);
+    if (!clipped) { setToast('The pasted block is entirely outside the canvas and cannot be placed.'); return; }
     pushHistory();
-    for (let y = minY; y <= maxY; y += 1) for (let x = minX; x <= maxX; x += 1) {
-      const sourceX = x - pastePreview.x; const sourceY = y - pastePreview.y;
-      activeLayer.pixels[y * width + x] = pastePreview.pixels[sourceY * pastePreview.width + sourceX];
-    }
+    writeClippedBlock(layerHistory.writablePixels(layer), width, pastePreview, clipped);
     setSelection(null);
     setPastePreview(null); bumpDocument(); setToast('The matrix block has been written over the current layer.');
   };
@@ -1045,7 +842,7 @@ export default function Home() {
     if (movePreview) return;
     if (tool === 'shape' || tool === 'move') return;
     if (tool === 'select') { event.currentTarget.setPointerCapture(event.pointerId); selectionStartRef.current = point; setSelectionDraft({ x: point.x, y: point.y, width: 1, height: 1 }); return; }
-    if (!requireEditableLayer()) return;
+    if (!getEditableLayer()) return;
     event.currentTarget.setPointerCapture(event.pointerId); pushHistory(); drawingRef.current = true; lastPointRef.current = point; paintSegment(point, point);
   };
   const handlePointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
@@ -1072,16 +869,17 @@ export default function Home() {
     }
     setBinaryClipboard({ width: selection.width, height: selection.height, pixels }); setToast(`Copied the final visible three-state content for a ${selection.width} × ${selection.height}.`);
   };
-  const beginPaste = () => { if (!binaryClipboard) { setToast('There is no matrix block to paste.'); return; } if (!requireEditableLayer()) return; setPastePreview({ ...binaryClipboard, x: cursor.x, y: cursor.y }); setTool('select'); };
+  const beginPaste = () => { if (!binaryClipboard) { setToast('There is no matrix block to paste.'); return; } if (!getEditableLayer()) return; setPastePreview({ ...binaryClipboard, x: cursor.x, y: cursor.y }); setTool('select'); };
   const applyShape = () => {
     if (!validateNumericInputs(shapeFieldsRef.current)) return;
     if (!hasParametricContent) { setToast(shape === 'text' ? 'Enter the text to apply.' : 'Grating width, height, and period must be greater than 0.'); return; }
     if (!clippedRange.hasIntersection) { setToast(`${parametricLabel} is entirely outside the canvas. There are no pixels to write.`); return; }
-    if (!requireEditableLayer()) return;
+    const layer = getEditableLayer();
+    if (!layer) return;
     if (shape === 'text') {
       void withProcessing('Rasterizing text', () => {
         pushHistory();
-        const touched = writeText(activeLayer.pixels, width, height, textSpec, operation);
+        const touched = writeText(layerHistory.writablePixels(layer), width, height, textSpec, operation);
         if (!touched) { undoRef.current.pop(); bumpHistory(); setToast('The text does not cover any pixels after binarization.'); return; }
         bumpDocument(); setToast(partiallyOutside ? 'The text has been clipped and written within the canvas.' : 'The text has been rasterized into the current layer.');
       });
@@ -1090,20 +888,30 @@ export default function Home() {
     if (shape === 'grating') {
       void withProcessing('Generating grating', () => {
         pushHistory();
-        const touched = writeGrating(activeLayer.pixels, width, height, gratingSpec, gratingWriteMode, gratingPolarity, operation);
+        const touched = writeGrating(layerHistory.writablePixels(layer), width, height, gratingSpec, gratingWriteMode, gratingPolarity, operation);
         if (!touched) { undoRef.current.pop(); bumpHistory(); setToast(gratingDuty <= 0 && gratingWriteMode === 'lines' ? 'The duty cycle is 0%. There are no grating lines to write.' : 'The grating does not cover any sampled pixels.'); return; }
         bumpDocument(); setToast(partiallyOutside ? 'The grating has been clipped and written within the canvas.' : 'The one-dimensional linear grating has been written to the current layer.');
       });
       return;
     }
     pushHistory();
-    const touched = writeShape(activeLayer.pixels, width, height, shapeSpec, operation);
+    const touched = writeShape(layerHistory.writablePixels(layer), width, height, shapeSpec, operation);
     if (!touched) { undoRef.current.pop(); bumpHistory(); setToast('The current parameters do not cover any pixel centers.'); return; }
     bumpDocument(); setToast(partiallyOutside ? 'The shape has been clipped and written within the canvas.' : 'The parametric shape has been written to the current layer.');
   };
-  const invertActiveLayer = () => { if (!requireEditableLayer()) return; pushHistory(); for (let index = 0; index < activeLayer.pixels.length; index += 1) { if (activeLayer.pixels[index] === OPAQUE_ONE) activeLayer.pixels[index] = OPAQUE_ZERO; else if (activeLayer.pixels[index] === OPAQUE_ZERO) activeLayer.pixels[index] = OPAQUE_ONE; } bumpDocument(); setToast('The current layer\'s 0 and 1 values have been inverted. Transparent pixels are unchanged.'); };
-  const clearActiveLayer = () => { if (!requireEditableLayer()) return; pushHistory(); activeLayer.pixels.fill(TRANSPARENT); bumpDocument(); setToast('The current layer has been cleared to transparent.'); };
-  const clearAllLayers = () => { if (layersRef.current.some((layer) => layer.locked)) { setToast('Some layers are locked. Unlock them before clearing all layers.'); return; } if (!window.confirm('Clear the contents of all layers? You can undo this action.')) return; pushHistory(); layersRef.current.forEach((layer) => layer.pixels.fill(TRANSPARENT)); bumpDocument(); setToast('All layers have been cleared to transparent.'); };
+  const invertActiveLayer = () => {
+    const layer = getEditableLayer();
+    if (!layer) return;
+    pushHistory();
+    const pixels = layerHistory.writablePixels(layer);
+    for (let index = 0; index < pixels.length; index += 1) {
+      if (pixels[index] === OPAQUE_ONE) pixels[index] = OPAQUE_ZERO;
+      else if (pixels[index] === OPAQUE_ZERO) pixels[index] = OPAQUE_ONE;
+    }
+    bumpDocument(); setToast('The current layer\'s 0 and 1 values have been inverted. Transparent pixels are unchanged.');
+  };
+  const clearActiveLayer = () => { const layer = getEditableLayer(); if (!layer) return; pushHistory(); layerHistory.writablePixels(layer).fill(TRANSPARENT); bumpDocument(); setToast('The current layer has been cleared to transparent.'); };
+  const clearAllLayers = () => { if (layersRef.current.some((layer) => layer.locked)) { setToast('Some layers are locked. Unlock them before clearing all layers.'); return; } if (!window.confirm('Clear the contents of all layers? You can undo this action.')) return; pushHistory(); layersRef.current.forEach((layer) => layerHistory.writablePixels(layer).fill(TRANSPARENT)); bumpDocument(); setToast('All layers have been cleared to transparent.'); };
 
   const addLayer = (fill: LayerFill) => {
     pushHistory();
@@ -1112,7 +920,7 @@ export default function Home() {
     const layer = createLayer(width, height, name, fill);
     const activeIndex = layersRef.current.findIndex((item) => item.id === activeLayerId);
     layersRef.current.splice(Math.max(0, activeIndex), 0, layer);
-    setActiveLayerId(layer.id); setSelectedLayerIds([layer.id]); setLayerCreateMenuOpen(false); bumpDocument();
+    setActiveLayerId(layer.id); setSelectedLayerIds([layer.id]); bumpDocument();
     setToast(fill === OPAQUE_ZERO ? 'Created a black 0 layer covering the entire canvas.' : fill === OPAQUE_ONE ? 'Created a white 1 layer covering the entire canvas.' : 'Created a transparent layer.');
   };
   const duplicateSelectedLayers = () => {
@@ -1173,72 +981,57 @@ export default function Home() {
   };
   const dropLayer = (targetId: string) => { if (!dragLayerId || dragLayerId === targetId) return; const sourceIndex = layersRef.current.findIndex((layer) => layer.id === dragLayerId); const source = layersRef.current[sourceIndex]; if (!source || source.locked) return; let targetIndex = layersRef.current.findIndex((layer) => layer.id === targetId); pushHistory(); layersRef.current.splice(sourceIndex, 1); if (sourceIndex < targetIndex) targetIndex -= 1; layersRef.current.splice(targetIndex, 0, source); setDragLayerId(null); bumpDocument(); };
 
-  const openMatrixEditor = () => void withProcessing('Opening matrix', async () => {
-    matrixDraftRef.current = new Uint8Array(activeLayer.pixels); setMatrixText(''); setMatrixView('cells'); setMatrixScope('layer');
-    setMatrixStartX(Math.max(0, Math.min(width - MATRIX_COLUMNS, cursor.x - Math.floor(MATRIX_COLUMNS / 2)))); setMatrixStartY(Math.max(0, Math.min(height - MATRIX_ROWS, cursor.y - Math.floor(MATRIX_ROWS / 2)))); setMatrixDraftVersion((value) => value + 1); setMatrixOpen(true);
-  });
+  const openMatrixEditor = () => {
+    const layer = getActiveLayer();
+    void withProcessing('Opening matrix', async () => {
+      matrixDraftRef.current = new Uint8Array(layer.pixels); setMatrixText(''); setMatrixView('cells'); setMatrixScope('layer');
+      setMatrixStartX(Math.max(0, Math.min(width - MATRIX_COLUMNS, cursor.x - Math.floor(MATRIX_COLUMNS / 2))));
+      setMatrixStartY(Math.max(0, Math.min(height - MATRIX_ROWS, cursor.y - Math.floor(MATRIX_ROWS / 2))));
+      bumpMatrixDraft(); setMatrixOpen(true);
+    });
+  };
   const matrixRegion: Selection = matrixScope === 'selection' && selection ? selection : { x: 0, y: 0, width, height };
-  const setMatrixCell = (x: number, y: number, value?: number) => { const draft = matrixDraftRef.current; if (!draft || activeLayer.locked || x < matrixRegion.x || x >= matrixRegion.x + matrixRegion.width || y < matrixRegion.y || y >= matrixRegion.y + matrixRegion.height) return; const index = y * width + x; draft[index] = value ?? (draft[index] === TRANSPARENT ? OPAQUE_ZERO : draft[index] === OPAQUE_ZERO ? OPAQUE_ONE : TRANSPARENT); setMatrixDraftVersion((current) => current + 1); };
+  const setMatrixCell = (x: number, y: number, value?: number) => { const draft = matrixDraftRef.current; if (!draft || getActiveLayer().locked || x < matrixRegion.x || x >= matrixRegion.x + matrixRegion.width || y < matrixRegion.y || y >= matrixRegion.y + matrixRegion.height) return; const index = y * width + x; draft[index] = value ?? (draft[index] === TRANSPARENT ? OPAQUE_ZERO : draft[index] === OPAQUE_ZERO ? OPAQUE_ONE : TRANSPARENT); bumpMatrixDraft(); };
   const changeMatrixScope = (scope: MatrixScope) => {
     if (scope === 'selection' && !selection) return;
     const region = scope === 'selection' && selection ? selection : { x: 0, y: 0, width, height };
     setMatrixScope(scope); setMatrixText(''); setMatrixStartX(region.x); setMatrixStartY(region.y);
   };
-  const loadMatrixText = () => { if (!matrixDraftRef.current) return; if (matrixRegion.width * matrixRegion.height > 300000 && !window.confirm('This is a large area. Converting it to text may take a while. Continue?')) return; setMatrixText(matrixScope === 'selection' ? regionToText(matrixDraftRef.current, width, matrixRegion) : layerToText(matrixDraftRef.current, width, height)); };
+  const loadMatrixText = () => { if (!matrixDraftRef.current) return; if (matrixRegion.width * matrixRegion.height > 300000 && !window.confirm('This is a large area. Converting it to text may take a while. Continue?')) return; setMatrixText(regionToText(matrixDraftRef.current, width, matrixRegion)); };
   const applyMatrixEditor = () => void withProcessing('Applying matrix', async () => {
     if (!validateNumericInputs(matrixFieldsRef.current)) return;
-    if (!requireEditableLayer()) return;
+    const layer = getEditableLayer();
+    if (!layer) return;
     try {
       if (matrixView === 'text') {
         const rows = parseMatrixText(matrixText);
         if (rows.length !== matrixRegion.height || rows[0].length !== matrixRegion.width) throw new Error(`The current editing area is ${matrixRegion.width} × ${matrixRegion.height}. The input matrix must match it exactly.`);
-        const draft = matrixDraftRef.current ?? new Uint8Array(activeLayer.pixels);
+        const draft = matrixDraftRef.current ?? new Uint8Array(layer.pixels);
         rows.forEach((row, y) => row.forEach((value, x) => { draft[(matrixRegion.y + y) * width + matrixRegion.x + x] = value; })); matrixDraftRef.current = draft;
       }
-      if (!matrixDraftRef.current) return; pushHistory(); activeLayer.pixels = new Uint8Array(matrixDraftRef.current); setMatrixOpen(false); bumpDocument(); setToast('The current layer\'s matrix has been updated.');
+      if (!matrixDraftRef.current) return; pushHistory(); layer.pixels = new Uint8Array(matrixDraftRef.current); setMatrixOpen(false); bumpDocument(); setToast('The current layer\'s matrix has been updated.');
     } catch (error) { setToast(error instanceof Error ? error.message : 'Unrecognized matrix format.'); }
   });
 
   const addImportedLayer = (pixels: Uint8Array, name: string) => { pushHistory(); const layer: Layer = { id: makeId(), name, pixels, visible: true, locked: false }; const activeIndex = layersRef.current.findIndex((item) => item.id === activeLayerId); layersRef.current.splice(Math.max(0, activeIndex), 0, layer); setActiveLayerId(layer.id); setSelectedLayerIds([layer.id]); bumpDocument(); };
   const importFile = async (file: File) => {
     try {
-      const pixels = new Uint8Array(width * height);
-      if (file.type === 'image/png' || file.name.toLowerCase().endsWith('.png')) {
-        const bitmap = await createImageBitmap(file); const temporary = document.createElement('canvas'); temporary.width = bitmap.width; temporary.height = bitmap.height;
-        const context = temporary.getContext('2d', { willReadFrequently: true }); if (!context) throw new Error('Could not read the image.');
-        context.drawImage(bitmap, 0, 0); const sourcePixels = context.getImageData(0, 0, bitmap.width, bitmap.height).data;
-        const copyWidth = Math.min(width, bitmap.width); const copyHeight = Math.min(height, bitmap.height);
-        for (let y = 0; y < copyHeight; y += 1) for (let x = 0; x < copyWidth; x += 1) {
-          const source = (y * bitmap.width + x) * 4; if (sourcePixels[source + 3] < 128) continue;
-          const luminance = sourcePixels[source] * 0.2126 + sourcePixels[source + 1] * 0.7152 + sourcePixels[source + 2] * 0.0722;
-          pixels[y * width + x] = luminance >= 128 ? OPAQUE_ONE : OPAQUE_ZERO;
-        }
-        bitmap.close();
-      } else {
-        const rows = parseMatrixText(await file.text()); const copyHeight = Math.min(height, rows.length); const copyWidth = Math.min(width, rows[0].length);
-        for (let y = 0; y < copyHeight; y += 1) for (let x = 0; x < copyWidth; x += 1) pixels[y * width + x] = rows[y][x];
-      }
+      const isPng = file.type === 'image/png' || file.name.toLowerCase().endsWith('.png');
+      const pixels = isPng ? await readPngLayer(file, width, height) : readMatrixLayer(await file.text(), width, height);
       addImportedLayer(pixels, file.name.replace(/\.[^.]+$/, '') || 'Imported Layer'); setToast('The file has been imported as a new layer aligned to the top-left corner. Out-of-bounds areas were clipped.');
     } catch (error) { setToast(error instanceof Error ? error.message : 'File import failed.'); }
   };
   const safeExportBaseName = (exportBaseName.trim().replace(/\.(png|csv|txt|bmask)$/i, '').replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-').replace(/[. ]+$/g, '') || `binary-mask-${width}x${height}`);
   const saveProject = () => void withProcessing('Saving project', async () => {
-    const payload: ProjectPayload = { format: 'binary-mask-studio', version: 1, width, height, dpi, pixelSizeUnit: canvasPixelSizeUnit ?? undefined, activeLayerId, layers: layersRef.current.map((layer) => ({ id: layer.id, name: layer.name, visible: layer.visible, locked: layer.locked, pixels: bytesToBase64(layer.pixels) })) };
-    downloadBlob(new Blob([JSON.stringify(payload)], { type: 'application/json' }), `${safeExportBaseName}.bmask`); setDocumentDirty(false); setToast('The layered project has been saved as a .bmask file.');
+    const project = serializeProject({ width, height, dpi, pixelSizeUnit: canvasPixelSizeUnit, activeLayerId, layers: layersRef.current });
+    downloadBlob(new Blob([project], { type: 'application/json' }), `${safeExportBaseName}.bmask`); setDocumentDirty(false); setToast('The layered project has been saved as a .bmask file.');
   });
   const openProject = async (file: File) => {
     try {
-      const payload = JSON.parse(await file.text()) as ProjectPayload;
-      if (payload.format !== 'binary-mask-studio' || payload.version !== 1) throw new Error('This is not a supported .bmask project file.');
-      if (!Number.isInteger(payload.width) || !Number.isInteger(payload.height) || payload.width < 1 || payload.height < 1 || payload.width > MAX_DIMENSION || payload.height > MAX_DIMENSION) throw new Error('The project\'s canvas dimensions are invalid.');
-      if (!isSupportedDpi(payload.dpi)) throw new Error('The project\'s DPI is invalid.');
-      if (!Array.isArray(payload.layers) || !payload.layers.length) throw new Error('The project contains no layers.');
-      const expectedLength = payload.width * payload.height;
-      const layers = payload.layers.map((item, index) => { const pixels = base64ToBytes(item.pixels); if (pixels.length !== expectedLength || pixels.some((value) => value > OPAQUE_ONE)) throw new Error(`Layer ${index + 1} has corrupted data.`); return { id: item.id || makeId(), name: item.name || `Layer ${index + 1}`, visible: Boolean(item.visible), locked: Boolean(item.locked), pixels }; });
-      layersRef.current = layers; setWidth(payload.width); setHeight(payload.height); setDpi(payload.dpi);
-      setCanvasPixelSizeUnit(payload.pixelSizeUnit === 'um' || payload.pixelSizeUnit === 'mm' ? payload.pixelSizeUnit : null);
-      const nextActive = layers.some((layer) => layer.id === payload.activeLayerId) ? payload.activeLayerId : layers[0].id;
-      setActiveLayerId(nextActive); setSelectedLayerIds([nextActive]); setCenterX(payload.width / 2); setCenterY(payload.height / 2); setCursor({ x: 0, y: 0 }); setSelection(null); setPastePreview(null); setMovePreview(null); setExportBaseName(file.name.replace(/\.bmask$/i, '') || `binary-mask-${payload.width}x${payload.height}`); resetHistory(); bumpDocument(false); setDocumentDirty(false); setAutoFitRequest((value) => value + 1); setToast('Opened the .bmask layered project.');
+      const project = deserializeProject(await file.text(), makeId);
+      layersRef.current = project.layers; setWidth(project.width); setHeight(project.height); setDpi(project.dpi);
+      setCanvasPixelSizeUnit(project.pixelSizeUnit);
+      setActiveLayerId(project.activeLayerId); setSelectedLayerIds([project.activeLayerId]); setCenterX(project.width / 2); setCenterY(project.height / 2); setCursor({ x: 0, y: 0 }); setSelection(null); setPastePreview(null); setMovePreview(null); setExportBaseName(file.name.replace(/\.bmask$/i, '') || `binary-mask-${project.width}x${project.height}`); resetHistory(); bumpDocument(false); setDocumentDirty(false); setAutoFitRequest((value) => value + 1); setToast('Opened the .bmask layered project.');
     } catch (error) { setToast(error instanceof Error ? error.message : 'Could not open the project file.'); }
   };
   const createNewCanvas = () => {
@@ -1258,16 +1051,11 @@ export default function Home() {
   });
   const exportMatrix = (format: 'csv' | 'txt') => void withProcessing(`Exporting ${format.toUpperCase()}`, async () => {
     const separator = format === 'csv' ? ',' : ' ';
-    downloadBlob(new Blob([compositeToText(compositeData, width, height, separator, exportTransparency)], { type: 'text/plain;charset=utf-8' }), `${safeExportBaseName}.${format}`);
+    const parts = Array.from(compositeTextChunks(compositeData, width, height, separator, exportTransparency));
+    downloadBlob(new Blob(parts, { type: 'text/plain;charset=utf-8' }), `${safeExportBaseName}.${format}`);
     setToast(`Exported a ${format.toUpperCase()} mask matrix.`);
   });
   const changeUnit = (nextUnit: SizeUnit) => { if (nextUnit === sizeUnit) return; const convert = (value: number) => fromPixels(toPixels(value, sizeUnit, dpi), nextUnit, dpi); setDimensionX(convert(dimensionX)); setDimensionY(convert(dimensionY)); setTriangleBase(convert(triangleBase)); setTriangleHeight(convert(triangleHeight)); setTriangleProjection(convert(triangleProjection)); setTextFontSize(convert(textFontSize)); setTextLetterSpacing(convert(textLetterSpacing)); setGratingWidth(convert(gratingWidth)); setGratingHeight(convert(gratingHeight)); setGratingPeriod(convert(gratingPeriod)); setGratingPhase(convert(gratingPhase)); setSizeUnit(nextUnit); };
-  const toggleAspect = () => { if (!aspectLinked) setAspectRatio(dimensionX > 0 ? dimensionY / dimensionX : 1); setAspectLinked((value) => !value); };
-  const updateDimensionX = (value: number) => { const next = Math.max(0.01, value || 0.01); setDimensionX(next); if (aspectLinked) setDimensionY(Math.max(0.01, next * aspectRatio)); };
-  const updateDimensionY = (value: number) => { const next = Math.max(0.01, value || 0.01); setDimensionY(next); if (aspectLinked) setDimensionX(Math.max(0.01, next / (aspectRatio || 1))); };
-  const toggleGratingAspect = () => { if (!gratingAspectLinked) setGratingAspectRatio(gratingWidth > 0 ? gratingHeight / gratingWidth : 1); setGratingAspectLinked((value) => !value); };
-  const updateGratingWidth = (value: number) => { const next = Math.max(0.01, value || 0.01); setGratingWidth(next); if (gratingAspectLinked) setGratingHeight(Math.max(0.01, next * gratingAspectRatio)); };
-  const updateGratingHeight = (value: number) => { const next = Math.max(0.01, value || 0.01); setGratingHeight(next); if (gratingAspectLinked) setGratingWidth(Math.max(0.01, next / (gratingAspectRatio || 1))); };
   const setZoomValue = (next: number) => { const normalized = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.round(next))); setZoom(normalized); };
   const fitCanvas = () => setZoomValue(Math.floor(fitScale * 100));
   const actualSize = () => setZoomValue(100);
@@ -1275,54 +1063,56 @@ export default function Home() {
   const refreshFromLogo = () => { if (!dirtyRef.current || window.confirm('This project has unsaved changes. Refresh the page and discard them?')) window.location.reload(); };
   const requestOpenProject = () => { if (!dirtyRef.current || window.confirm('This project has unsaved changes. Open another project and discard them?')) projectInputRef.current?.click(); };
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (event.code === 'Space' && !target?.matches('input, textarea, select, [contenteditable="true"]')) { event.preventDefault(); spacePressedRef.current = true; setSpacePressed(true); return; }
-      if (target?.matches('input, textarea, select, [contenteditable="true"]')) return;
-      if (helpOpen || aboutOpen || matrixOpen || newCanvasOpen) {
-        if (event.key === 'Escape') { setHelpOpen(false); setAboutOpen(false); setMatrixOpen(false); setNewCanvasOpen(false); }
+  const runShortcut = useEffectEvent((event: KeyboardEvent) => {
+    const target = event.target as HTMLElement | null;
+    if (event.code === 'Space' && !target?.matches('input, textarea, select, [contenteditable="true"]')) { event.preventDefault(); spacePressedRef.current = true; setSpacePressed(true); return; }
+    if (target?.matches('input, textarea, select, [contenteditable="true"]')) return;
+    if (helpOpen || aboutOpen || matrixOpen || newCanvasOpen) {
+      if (event.key === 'Escape') { setHelpOpen(false); setAboutOpen(false); setMatrixOpen(false); setNewCanvasOpen(false); }
+      return;
+    }
+    const command = event.ctrlKey || event.metaKey; const key = event.key.toLowerCase();
+    if (command && key === 'z') { event.preventDefault(); if (event.shiftKey) redo(); else undo(); return; }
+    if (command && key === 'y') { event.preventDefault(); redo(); return; }
+    if (command && key === 's') { event.preventDefault(); saveProject(); return; }
+    if (command && key === 'o') { event.preventDefault(); requestOpenProject(); return; }
+    if (command && key === 'a') { event.preventDefault(); selectAll(); return; }
+    if (command && key === 'd') { event.preventDefault(); deselect(); return; }
+    if (command && key === 'c') { event.preventDefault(); copySelection(); return; }
+    if (command && key === 'v') { event.preventDefault(); beginPaste(); return; }
+    if (command && key === '0') { event.preventDefault(); fitCanvas(); return; }
+    if (command && key === '1') { event.preventDefault(); actualSize(); return; }
+    if (pastePreview || movePreview) {
+      if (event.key === 'Escape') { event.preventDefault(); setPastePreview(null); setMovePreview(null); return; }
+      if (event.key === 'Enter') { event.preventDefault(); if (pastePreview) confirmPaste(); else confirmMove(); return; }
+      if (event.key.startsWith('Arrow')) {
+        event.preventDefault(); const step = event.shiftKey ? 10 : 1;
+        if (pastePreview) setPastePreview((preview) => { if (!preview) return null; if (event.key === 'ArrowLeft') return { ...preview, x: preview.x - step }; if (event.key === 'ArrowRight') return { ...preview, x: preview.x + step }; if (event.key === 'ArrowUp') return { ...preview, y: preview.y - step }; return { ...preview, y: preview.y + step }; });
+        else setMovePreview((preview) => { if (!preview) return null; if (event.key === 'ArrowLeft') return { ...preview, x: preview.x - step }; if (event.key === 'ArrowRight') return { ...preview, x: preview.x + step }; if (event.key === 'ArrowUp') return { ...preview, y: preview.y - step }; return { ...preview, y: preview.y + step }; });
         return;
       }
-      const command = event.ctrlKey || event.metaKey; const key = event.key.toLowerCase();
-      if (command && key === 'z') { event.preventDefault(); if (event.shiftKey) redo(); else undo(); return; }
-      if (command && key === 'y') { event.preventDefault(); redo(); return; }
-      if (command && key === 's') { event.preventDefault(); saveProject(); return; }
-      if (command && key === 'o') { event.preventDefault(); requestOpenProject(); return; }
-      if (command && key === 'a') { event.preventDefault(); selectAll(); return; }
-      if (command && key === 'd') { event.preventDefault(); deselect(); return; }
-      if (command && key === 'c') { event.preventDefault(); copySelection(); return; }
-      if (command && key === 'v') { event.preventDefault(); beginPaste(); return; }
-      if (command && key === '0') { event.preventDefault(); fitCanvas(); return; }
-      if (command && key === '1') { event.preventDefault(); actualSize(); return; }
-      if (pastePreview || movePreview) {
-        if (event.key === 'Escape') { event.preventDefault(); setPastePreview(null); setMovePreview(null); return; }
-        if (event.key === 'Enter') { event.preventDefault(); if (pastePreview) confirmPaste(); else confirmMove(); return; }
-        if (event.key.startsWith('Arrow')) {
-          event.preventDefault(); const step = event.shiftKey ? 10 : 1;
-          if (pastePreview) setPastePreview((preview) => { if (!preview) return null; if (event.key === 'ArrowLeft') return { ...preview, x: preview.x - step }; if (event.key === 'ArrowRight') return { ...preview, x: preview.x + step }; if (event.key === 'ArrowUp') return { ...preview, y: preview.y - step }; return { ...preview, y: preview.y + step }; });
-          else setMovePreview((preview) => { if (!preview) return null; if (event.key === 'ArrowLeft') return { ...preview, x: preview.x - step }; if (event.key === 'ArrowRight') return { ...preview, x: preview.x + step }; if (event.key === 'ArrowUp') return { ...preview, y: preview.y - step }; return { ...preview, y: preview.y + step }; });
-          return;
-        }
-      }
-      if (event.key === 'Delete' || event.key === 'Backspace') { event.preventDefault(); clearSelection(); return; }
-      if (key === 'b') { activateTool('draw'); return; }
-      if (key === 'e') { activateTool('erase'); return; }
-      if (key === 'm') { activateTool('select'); return; }
-      if (key === 'v') { beginMove(); return; }
-      if (event.key === '[') { setBrushSize((value) => Math.max(1, value - 1)); return; }
-      if (event.key === ']') { setBrushSize((value) => Math.min(128, value + 1)); }
-    };
+    }
+    if (event.key === 'Delete' || event.key === 'Backspace') { event.preventDefault(); clearSelection(); return; }
+    if (key === 'b') { activateTool('draw'); return; }
+    if (key === 'e') { activateTool('erase'); return; }
+    if (key === 'm') { activateTool('select'); return; }
+    if (key === 'v') { beginMove(); return; }
+    if (event.key === '[') { setBrushSize((value) => Math.max(1, value - 1)); return; }
+    if (event.key === ']') { setBrushSize((value) => Math.min(128, value + 1)); }
+  });
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => runShortcut(event);
     const handleKeyUp = (event: KeyboardEvent) => { if (event.code === 'Space') { spacePressedRef.current = false; setSpacePressed(false); } };
     const handleBlur = () => { spacePressedRef.current = false; setSpacePressed(false); };
     window.addEventListener('keydown', handleKeyDown); window.addEventListener('keyup', handleKeyUp); window.addEventListener('blur', handleBlur);
     return () => { window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); window.removeEventListener('blur', handleBlur); };
-  });
+  }, []);
 
-  const matrixGridColumns = Array.from({ length: Math.min(MATRIX_COLUMNS, matrixRegion.x + matrixRegion.width - matrixStartX) }, (_, index) => matrixStartX + index);
-  const matrixGridRows = Array.from({ length: Math.min(MATRIX_ROWS, matrixRegion.y + matrixRegion.height - matrixStartY) }, (_, index) => matrixStartY + index);
   const selectionLabel = selection ? `X ${selection.x}–${selection.x + selection.width - 1} · Y ${selection.y}–${selection.y + selection.height - 1} · ${selection.width}×${selection.height} px` : '';
-  const layerList = layersRef.current;
+  // Keep the existing gesture-driven cursor style without putting pointer coordinates in state.
+  // eslint-disable-next-line react-hooks/refs
+  const isPanning = Boolean(panRef.current);
 
   return (
     <main className="app-shell">
@@ -1330,8 +1120,8 @@ export default function Home() {
         <button className="brand" type="button" aria-label={dirty ? 'Refresh page; unsaved changes' : 'Refresh page'} onClick={refreshFromLogo}><span className="brand-mark" aria-hidden="true"><i /><i /><i /><i /></span><span><strong>Binary Mask Studio{dirty ? <i className="dirty-dot" title="Unsaved changes" /> : null}</strong><small>PIXEL-PRECISE EDITING</small></span></button>
         <div className="topbar-actions"><button type="button" aria-label="Help" title="Help" onClick={() => void openInfoWindow('help')}>?</button><button type="button" aria-label="Application information" title="Application information" onClick={() => void openInfoWindow('about')}>!</button></div>
       </header>
-      <section className="workspace" ref={layout.workspaceRef} style={layout.style}>
-        <aside className="left-sidebar" id="settings-column" ref={layout.leftRef}>
+      <section className="workspace" ref={workspaceRef} style={workspaceStyle}>
+        <aside className="left-sidebar" id="settings-column" ref={leftRef}>
           <section className="panel settings-panel" id="canvas-settings">
           <SectionHeading number="01" title="Canvas" />
           <div className="canvas-parameter-stack">
@@ -1340,7 +1130,7 @@ export default function Home() {
             <div className="physical-size"><span>Physical size</span><strong>{physicalWidth} × {physicalHeight} mm</strong></div>
           </div>
           </section>
-          <PanelSplitter orientation="horizontal" label="Resize Canvas and Parametric Shapes" controls="canvas-settings parametric-shapes" {...layout.canvas} />
+          <PanelSplitter orientation="horizontal" label="Resize Canvas and Parametric Shapes" controls="canvas-settings parametric-shapes" {...canvasSplitter} />
           <section ref={shapeFieldsRef} className="panel settings-panel" id="parametric-shapes" onFocusCapture={() => setTool('shape')}>
           <SectionHeading number="02" title="Parametric Shapes" />
           <label>Shape type<select value={shape} onChange={(event) => setShape(event.target.value as ParametricKind)}><option value="circle">Circle</option><option value="triangle">Triangle</option><option value="rectangle">Rectangle</option><option value="text">Text</option><option value="grating">Grating</option></select></label>
@@ -1375,7 +1165,7 @@ export default function Home() {
           </section>
         </aside>
 
-        <PanelSplitter orientation="vertical" label="Resize settings and image columns" controls="settings-column image-column" {...layout.left} />
+        <PanelSplitter orientation="vertical" label="Resize settings and image columns" controls="settings-column image-column" {...leftSplitter} />
         <section className="canvas-column" id="image-column">
           <div className={`toolstrip ${tool === 'draw' || tool === 'erase' ? 'brush-open' : ''}`} aria-label="Drawing tools">
             <div className="tool-group">
@@ -1385,7 +1175,7 @@ export default function Home() {
               <button className={tool === 'move' ? 'active' : ''} type="button" disabled={!selection || activeLayer.locked} onClick={beginMove}><span>✥</span>Move</button>
             </div>
             <div className="tool-divider" /><div className="tool-group"><button type="button" disabled={!selection} onClick={copySelection}>Copy</button><button type="button" disabled={!binaryClipboard} onClick={beginPaste}>Paste</button></div>
-            <div className="tool-divider" /><div className="tool-group"><button type="button" disabled={!undoRef.current.length} onClick={undo}>Undo</button><button type="button" disabled={!redoRef.current.length} onClick={redo}>Redo</button><button type="button" onClick={invertActiveLayer}>Invert</button><button type="button" onClick={clearActiveLayer}>Clear</button></div>
+            <div className="tool-divider" /><div className="tool-group"><button type="button" disabled={!historyView.canUndo} onClick={undo}>Undo</button><button type="button" disabled={!historyView.canRedo} onClick={redo}>Redo</button><button type="button" onClick={invertActiveLayer}>Invert</button><button type="button" onClick={clearActiveLayer}>Clear</button></div>
             <div className="tool-divider" /><div className="tool-group">
               <input ref={fileInputRef} aria-label="Import image or matrix file" className="visually-hidden" type="file" accept=".png,.txt,.csv,text/plain,image/png" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importFile(file); event.currentTarget.value = ''; }} />
               <input ref={projectInputRef} aria-label="Open project file" className="visually-hidden" type="file" accept=".bmask,application/json" onChange={(event) => { const file = event.target.files?.[0]; if (file) void openProject(file); event.currentTarget.value = ''; }} />
@@ -1395,99 +1185,43 @@ export default function Home() {
             {processing && <span className="processing-chip"><i />{processing}</span>}
             <div className="zoom-tools"><button type="button" aria-label="Fit to Window" title="Fit to Window Ctrl+0" onClick={fitCanvas}><FitIcon /></button><label className="zoom-control" aria-label="Canvas zoom"><NumericInput value={zoom} suffix="%" min={MIN_ZOOM} max={MAX_ZOOM} onValueChange={setZoomValue} /></label></div>
           </div>
-          <div ref={stageRef} className={`stage ${spacePressed ? 'pan-ready' : ''} ${panRef.current ? 'panning' : ''}`} onWheel={handleWheel}><div className="stage-inner" style={{ minWidth: `${displayWidth + 112}px`, minHeight: `${displayHeight + 104}px` }}><div className="canvas-shell" style={{ width: `${displayWidth}px`, height: `${displayHeight}px`, '--grid-size': `${Math.max(8, 24 * (zoom / 100))}px` } as CSSProperties}>
+          <div ref={stageRef} className={`stage ${spacePressed ? 'pan-ready' : ''} ${isPanning ? 'panning' : ''}`} onWheel={handleWheel}><div className="stage-inner" style={{ minWidth: `${displayWidth + 112}px`, minHeight: `${displayHeight + 104}px` }}><div className="canvas-shell" style={{ width: `${displayWidth}px`, height: `${displayHeight}px`, '--grid-size': `${Math.max(8, 24 * (zoom / 100))}px` } as CSSProperties}>
             <div className="ruler ruler-x"><span /><span>{width / 2}</span><span>{width}</span></div><div className="ruler ruler-y"><span /><span>{height / 2}</span><span>{height}</span></div>
             <div ref={canvasFrameRef} className="canvas-frame"><canvas ref={canvasRef} aria-label="Binary image canvas" /><canvas ref={overlayRef} className={`drawing-layer tool-${tool}`} onPointerEnter={(event) => { setCursor(pointerToPixel(event)); setPointerInCanvas(true); }} onPointerLeave={() => setPointerInCanvas(false)} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={stopPointerAction} onPointerCancel={stopPointerAction} onDoubleClick={(event) => { if (event.button !== 0) return; if (pastePreview) { event.preventDefault(); confirmPaste(); } else if (movePreview) { event.preventDefault(); confirmMove(); } }} aria-label="Drawing interaction layer" /><span className="axis axis-x" /><span className="axis axis-y" /><span className="origin-dot" /><span className="origin-label">(0, 0)</span></div>
           </div></div></div>
         </section>
 
-        <PanelSplitter orientation="vertical" className="right-column-splitter" label="Resize image and inspector columns" controls="image-column inspector-column" {...layout.right} />
-        <aside className="right-sidebar" id="inspector-column" ref={layout.rightRef}>
-          <section className="panel layer-panel" id="layers-panel"><SectionHeading number="03" title="Layers" />
-            <div className="layer-actions primary-actions"><div className="layer-create-control" ref={layerCreateRef}><button type="button" aria-haspopup="menu" aria-expanded={layerCreateMenuOpen} onClick={() => setLayerCreateMenuOpen((open) => !open)}>New</button>{layerCreateMenuOpen && <div className="layer-create-menu" role="menu" aria-label="New layer type"><button type="button" role="menuitem" onClick={() => addLayer(TRANSPARENT)}><i className="layer-fill-swatch transparent" aria-hidden="true" /><span>Transparent Layer</span></button><button type="button" role="menuitem" onClick={() => addLayer(OPAQUE_ZERO)}><i className="layer-fill-swatch zero" aria-hidden="true" /><span>Black 0 Layer</span></button><button type="button" role="menuitem" onClick={() => addLayer(OPAQUE_ONE)}><i className="layer-fill-swatch one" aria-hidden="true" /><span>White 1 Layer</span></button></div>}</div><button type="button" onClick={duplicateSelectedLayers}>Duplicate</button><button type="button" disabled={selectedLayerIds.length < 2} onClick={mergeSelectedLayers}>Merge Selected</button></div>
-            <div className="layer-list" aria-label="Layer list">{layerList.map((layer, index) => {
-              const selected = selectedSet.has(layer.id); const active = layer.id === activeLayerId;
-              return <div key={layer.id} className={`layer-row ${selected ? 'selected' : ''} ${active ? 'active' : ''} ${layer.locked ? 'locked' : ''}`} draggable={!layer.locked} onDragStart={() => setDragLayerId(layer.id)} onDragOver={(event) => event.preventDefault()} onDrop={() => dropLayer(layer.id)} onClick={(event) => selectLayer(event, layer.id)} onDoubleClick={() => renameLayer(layer.id)}>
-                <button type="button" className="icon-button" aria-label={layer.visible ? 'Hide layer' : 'Show layer'} title={layer.visible ? 'Hide layer' : 'Show layer'} onClick={(event) => { event.stopPropagation(); toggleLayerVisibility(layer.id); }}><EyeIcon open={layer.visible} /></button><LayerThumbnail layer={layer} width={width} height={height} version={docVersion} /><span className="layer-name"><strong>{layer.name}</strong><small>{layer.visible ? 'Visible' : 'Hidden'} · {layer.locked ? 'Locked' : 'Editable'}</small></span><button type="button" className="icon-button lock-button" aria-label={layer.locked ? 'Unlock layer' : 'Lock layer'} title={layer.locked ? 'Unlock layer' : 'Lock layer'} onClick={(event) => { event.stopPropagation(); toggleLayerLock(layer.id); }}><LockIcon locked={layer.locked} /></button><button type="button" className="icon-button delete-layer-button" aria-label={`Delete layer ${layer.name}`} title="Delete layer" disabled={layer.locked} onClick={(event) => { event.stopPropagation(); deleteLayer(layer.id); }} onDoubleClick={(event) => event.stopPropagation()}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="m9 9 6 6m0-6-6 6" /></svg></button><div className="layer-order-controls" onClick={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}>
-                  <button type="button" className="icon-button layer-order-button" aria-label={`Move layer up: ${layer.name}`} title="Move layer up" disabled={index === 0 || layer.locked} onClick={() => moveLayer(layer.id, -1)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 15 6-6 6 6" /></svg></button>
-                  <span className="drag-handle" aria-hidden="true"><i /><i /><i /></span>
-                  <button type="button" className="icon-button layer-order-button" aria-label={`Move layer down: ${layer.name}`} title="Move layer down" disabled={index === layerList.length - 1 || layer.locked} onClick={() => moveLayer(layer.id, 1)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></button>
-                </div>
-              </div>;
-            })}</div>
-            <button className="clear-all-button" type="button" onClick={clearAllLayers}>Clear All Layers</button>
-          </section>
-          <PanelSplitter orientation="horizontal" label="Resize Layers and Pixel Inspector" controls="layers-panel pixel-inspector" {...layout.layers} />
-          <section className="panel inspector-panel" id="pixel-inspector"><SectionHeading number="04" title="Pixel Inspector" />
-            <div className="coordinate-card"><small>Current pixel · Top-left origin</small><div><span>X</span><strong>{cursor.x}</strong><span>Y</span><strong>{cursor.y}</strong></div><p>Pixel value <b>{currentValue}</b></p>{showGratingPreview && <p>Grating preview (current layer) <b>{gratingPreviewReadout}</b></p>}</div>
-            <div className="metric-list"><div><span>White pixels</span><strong>{whitePixels.toLocaleString('en-US')} ({((whitePixels / (width * height)) * 100).toFixed(4)}%)</strong></div><div><span>Total pixels</span><strong>{(width * height).toLocaleString('en-US')}</strong></div></div>
-            <label className="export-name">Export file name<input value={exportBaseName} onChange={(event) => setExportBaseName(event.target.value)} onBlur={() => setExportBaseName(safeExportBaseName)} /></label>
-            <div className="export-transparency">
-              <label><input type="checkbox" checked={exportTransparency} onChange={(event) => setExportTransparency(event.target.checked)}
-                aria-describedby={exportTransparency ? undefined : 'export-transparency-warning'} />Export transparency</label>
-              {!exportTransparency && <span id="export-transparency-warning" className="export-transparency-warning" role="status">
-                <svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
-                  <circle cx="8" cy="8" r="6.5" />
-                  <path d="M8 4.8v3.7" />
-                  <circle cx="8" cy="11" r=".8" fill="currentColor" stroke="none" />
-                </svg>
-                <span>Transparent pixels will export as BLACK (0).</span>
-              </span>}
-            </div>
-            <div className="download-row"><button type="button" disabled={Boolean(processing)} onClick={exportPng}>Export PNG</button><button type="button" disabled={Boolean(processing)} onClick={() => exportMatrix('csv')}>Export CSV</button><button type="button" disabled={Boolean(processing)} onClick={() => exportMatrix('txt')}>Export TXT</button></div>
-          </section>
+        <PanelSplitter orientation="vertical" className="right-column-splitter" label="Resize image and inspector columns" controls="image-column inspector-column" {...rightSplitter} />
+        <aside className="right-sidebar" id="inspector-column" ref={rightRef}>
+          <LayersPanel width={width} height={height} docVersion={docVersion} layerList={layerList} selectedSet={selectedSet} selectedCount={selectedLayerIds.length} activeLayerId={activeLayerId}
+            onAddLayer={addLayer} duplicateSelectedLayers={duplicateSelectedLayers} mergeSelectedLayers={mergeSelectedLayers} setDragLayerId={setDragLayerId}
+            dropLayer={dropLayer} selectLayer={selectLayer} renameLayer={renameLayer} toggleLayerVisibility={toggleLayerVisibility}
+            toggleLayerLock={toggleLayerLock} deleteLayer={deleteLayer} moveLayer={moveLayer} clearAllLayers={clearAllLayers} />
+          <PanelSplitter orientation="horizontal" label="Resize Layers and Pixel Inspector" controls="layers-panel pixel-inspector" {...layersSplitter} />
+          <PixelInspector cursor={cursor} currentValue={currentValue} showGratingPreview={showGratingPreview} gratingPreviewReadout={gratingPreviewReadout}
+            whitePixels={whitePixels} width={width} height={height} exportBaseName={exportBaseName} safeExportBaseName={safeExportBaseName}
+            setExportBaseName={setExportBaseName} exportTransparency={exportTransparency} setExportTransparency={setExportTransparency}
+            processing={processing} exportPng={exportPng} exportMatrix={exportMatrix} />
         </aside>
       </section>
 
-      {newCanvasOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setNewCanvasOpen(false); }}><section ref={newCanvasFieldsRef} className="dialog-card new-canvas-dialog" role="dialog" aria-modal="true" aria-labelledby="new-canvas-title">
-        <div className="modal-header"><div><small>NEW BINARY DOCUMENT</small><h2 id="new-canvas-title">New Canvas</h2></div><button type="button" aria-label="Close" onClick={() => setNewCanvasOpen(false)}>×</button></div><p>Width, height, and DPI are locked after creation. Every layer uses the same canvas dimensions.</p>
-        <div className="field-grid two-columns"><label>Width<div className="input-shell"><NumericInput className="number-input" min="1" max={MAX_DIMENSION} value={newWidth} onValueChange={(value) => setNewWidth(value)} /><FieldSuffix>px</FieldSuffix></div></label><label>Height<div className="input-shell"><NumericInput className="number-input" min="1" max={MAX_DIMENSION} value={newHeight} onValueChange={(value) => setNewHeight(value)} /><FieldSuffix>px</FieldSuffix></div></label></div>
-        <fieldset className="canvas-resolution">
-          <legend>Set resolution by</legend>
-          <div className="field-grid two-columns">
-            <div>
-              <label className="resolution-choice"><input type="radio" name="canvas-resolution" checked={newResolutionMode === 'dpi'} onChange={() => setNewResolutionMode('dpi')} />DPI</label>
-              <div className="input-shell">
-                {newResolutionMode === 'dpi'
-                  ? <NumericInput aria-label="DPI value" className="number-input" min={MIN_DPI} max={MAX_DPI} strictRange formatValue={(value) => value.toFixed(2)} value={newDpi} onValueChange={(value) => setNewDpi(Number(value.toFixed(2)))} />
-                  : <input aria-label="DPI value" className="number-input" value={displayedNewDpi} readOnly />}
-                <FieldSuffix>DPI</FieldSuffix>
-              </div>
-            </div>
-            <div>
-              <label className="resolution-choice"><input type="radio" name="canvas-resolution" checked={newResolutionMode === 'pixel'} onChange={() => setNewResolutionMode('pixel')} />Pixel size</label>
-              <div className="pixel-side-row">
-                {newResolutionMode === 'pixel'
-                  ? <NumericInput key={newPixelSideUnit} aria-label="Pixel size value" className="number-input" min={minPixelSide} max={maxPixelSide} step={newPixelSideUnit === 'um' ? 0.1 : 0.0001} strictRange formatValue={formatPixelSize} value={newPixelSide}
-                      onValueChange={(value) => setNewDpi(Math.min(MAX_DPI, Math.max(MIN_DPI, unitsPerInch / value)))} />
-                  : <input aria-label="Pixel size value" className="number-input" value={formatPixelSize(newPixelSide)} readOnly />}
-                <select aria-label="Pixel size unit" value={newPixelSideUnit} onChange={(event) => setNewPixelSideUnit(event.target.value as PixelSideUnit)}><option value="um">μm</option><option value="mm">mm</option></select>
-              </div>
-            </div>
-          </div>
-        </fieldset>
-        <div className="physical-size"><span>Physical size</span><strong>{((Math.round(newWidth) / newDpi) * 25.4).toFixed(2)} × {((Math.round(newHeight) / newDpi) * 25.4).toFixed(2)} mm</strong></div>
-        <div className="modal-footer"><button type="button" onClick={() => setNewCanvasOpen(false)}>Cancel</button><button className="modal-primary" type="button" onClick={createNewCanvas}>Create &amp; Lock</button></div>
-      </section></div>}
+      {newCanvasOpen && <NewCanvasDialog newCanvasFieldsRef={newCanvasFieldsRef} newWidth={newWidth} newHeight={newHeight} newDpi={newDpi}
+        newResolutionMode={newResolutionMode} newPixelSideUnit={newPixelSideUnit} setNewWidth={setNewWidth} setNewHeight={setNewHeight}
+        setNewDpi={setNewDpi} setNewResolutionMode={setNewResolutionMode} setNewPixelSideUnit={setNewPixelSideUnit}
+        createNewCanvas={createNewCanvas} onClose={() => setNewCanvasOpen(false)} />}
 
-      {matrixOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setMatrixOpen(false); }}><section ref={matrixFieldsRef} className="dialog-card matrix-modal" role="dialog" aria-modal="true" aria-labelledby="matrix-title">
-        <div className="modal-header"><div><small>CURRENT LAYER MATRIX</small><h2 id="matrix-title">Edit Current Layer · {activeLayer.name}</h2></div><button type="button" aria-label="Close" onClick={() => setMatrixOpen(false)}>×</button></div>
-        <div className="matrix-legend"><span><i className="transparent-swatch">·</i>Transparent</span><span><i className="zero-swatch">0</i>Black</span><span><i className="one-swatch">1</i>White</span><b>{matrixRegion.width} × {matrixRegion.height}</b></div>
-        <div className="matrix-scope" role="group" aria-label="Matrix editing area"><button className={matrixScope === 'layer' ? 'active' : ''} type="button" onClick={() => changeMatrixScope('layer')}>Entire Layer</button><button className={matrixScope === 'selection' ? 'active' : ''} type="button" disabled={!selection} onClick={() => changeMatrixScope('selection')}>Current Selection</button><span>{matrixScope === 'selection' ? `X ${matrixRegion.x}–${matrixRegion.x + matrixRegion.width - 1} · Y ${matrixRegion.y}–${matrixRegion.y + matrixRegion.height - 1}` : 'Editing the entire layer matrix'}</span></div>
-        <div className="modal-tabs"><button className={matrixView === 'cells' ? 'active' : ''} type="button" onClick={() => setMatrixView('cells')}>Cell Editor</button><button className={matrixView === 'text' ? 'active' : ''} type="button" onClick={() => setMatrixView('text')}>Text Input</button></div>
-        {matrixView === 'cells' ? <div className="cell-editor">
-          <div className="matrix-navigation"><label>Start X<NumericInput className="number-input" min={matrixRegion.x} max={matrixRegion.x + matrixRegion.width - 1} value={matrixStartX} onValueChange={(value) => setMatrixStartX(Math.max(matrixRegion.x, Math.min(matrixRegion.x + matrixRegion.width - 1, value || matrixRegion.x)))} /></label><label>Start Y<NumericInput className="number-input" min={matrixRegion.y} max={matrixRegion.y + matrixRegion.height - 1} value={matrixStartY} onValueChange={(value) => setMatrixStartY(Math.max(matrixRegion.y, Math.min(matrixRegion.y + matrixRegion.height - 1, value || matrixRegion.y)))} /></label><button type="button" onClick={() => setMatrixStartX(Math.max(matrixRegion.x, matrixStartX - MATRIX_COLUMNS))}>←</button><button type="button" onClick={() => setMatrixStartX(Math.min(matrixRegion.x + matrixRegion.width - 1, matrixStartX + MATRIX_COLUMNS))}>→</button><button type="button" onClick={() => setMatrixStartY(Math.max(matrixRegion.y, matrixStartY - MATRIX_ROWS))}>↑</button><button type="button" onClick={() => setMatrixStartY(Math.min(matrixRegion.y + matrixRegion.height - 1, matrixStartY + MATRIX_ROWS))}>↓</button></div>
-          <div className="matrix-grid-wrap"><div className="matrix-grid" style={{ gridTemplateColumns: `46px repeat(${matrixGridColumns.length}, 34px)` }} data-version={matrixDraftVersion}><span className="corner-cell">Y / X</span>{matrixGridColumns.map((x) => <span className="axis-cell" key={`x-${x}`}>{x}</span>)}{matrixGridRows.flatMap((y) => [<span className="axis-cell row-axis" key={`y-${y}`}>{y}</span>, ...matrixGridColumns.map((x) => { const value = matrixDraftRef.current?.[y * width + x] ?? TRANSPARENT; return <button type="button" key={`${x}-${y}`} className={`matrix-cell state-${value}`} aria-label={`X ${x}, Y ${y}, ${value === OPAQUE_ONE ? '1 White' : value === OPAQUE_ZERO ? '0 Black' : 'Transparent'}`} onClick={() => setMatrixCell(x, y)} onKeyDown={(event) => { if (event.key === '0') setMatrixCell(x, y, OPAQUE_ZERO); else if (event.key === '1') setMatrixCell(x, y, OPAQUE_ONE); else if (event.key === 'Delete' || event.key === 'Backspace') setMatrixCell(x, y, TRANSPARENT); }}>{value === OPAQUE_ONE ? '1' : value === OPAQUE_ZERO ? '0' : '·'}</button>; })])}</div></div>
-          <p>Click to cycle through transparent → 0 → 1. Press 0 or 1 to set a value, or Delete/Backspace to make it transparent.</p>
-        </div> : <div className="text-matrix-editor"><p>The first row corresponds to the top of the editing area. Input dimensions must match the {matrixScope === 'selection' ? 'current selection' : 'entire layer'} exactly. Use 0 for black, 1 for white, and null or · for transparency. Spaces, commas, line breaks, and MATLAB semicolons are supported.</p><button type="button" onClick={loadMatrixText}>Load {matrixScope === 'selection' ? 'Selection' : 'Layer'} Text</button><textarea value={matrixText} onChange={(event) => setMatrixText(event.target.value)} spellCheck={false} placeholder={'· · · · ·\n· 0 1 0 ·\n· 1 1 1 ·\n· · · · ·'} /></div>}
-        <div className="modal-footer"><span>All changes are saved as one undo step when you confirm.</span><button type="button" onClick={() => setMatrixOpen(false)}>Cancel</button><button className="modal-primary" type="button" disabled={activeLayer.locked} onClick={applyMatrixEditor}>Apply to Current Layer</button></div>
-      </section></div>}
+      {matrixOpen && <MatrixEditorDialog matrixFieldsRef={matrixFieldsRef} activeLayerName={activeLayer.name} locked={activeLayer.locked}
+        width={width} selection={selection} matrixRegion={matrixRegion} matrixScope={matrixScope} matrixView={matrixView}
+        matrixStartX={matrixStartX} matrixStartY={matrixStartY} matrixDraft={matrixDraftView.pixels} matrixDraftVersion={matrixDraftView.version}
+        matrixText={matrixText} changeMatrixScope={changeMatrixScope} setMatrixView={setMatrixView} setMatrixStartX={setMatrixStartX}
+        setMatrixStartY={setMatrixStartY} setMatrixText={setMatrixText} setMatrixCell={setMatrixCell} loadMatrixText={loadMatrixText}
+        applyMatrixEditor={applyMatrixEditor} onClose={() => setMatrixOpen(false)} />}
       {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} quote={quote} />}
       {aboutOpen && <AboutDialog onClose={() => setAboutOpen(false)} quote={quote} />}
       {pastePreview && <div className="paste-hint">Pointer sets top-left corner · Enter / double-click to place · Esc to cancel · Arrow keys to adjust</div>}
       {movePreview && <div className="move-hint"><strong>ΔX {movePreview.x - movePreview.source.x >= 0 ? '+' : ''}{movePreview.x - movePreview.source.x} · ΔY {movePreview.y - movePreview.source.y >= 0 ? '+' : ''}{movePreview.y - movePreview.source.y}</strong><span>X {movePreview.x} · Y {movePreview.y}</span><small>Pointer sets top-left corner · Enter / double-click to place · Esc to cancel · Arrow keys to adjust</small></div>}
       {toast && <div className="toast" role="status"><span />{toast}</div>}
-      <span className="history-sentinel" data-history-version={historyVersion} />
+      <span className="history-sentinel" data-history-version={historyView.version} />
     </main>
   );
 }
