@@ -297,11 +297,13 @@ function writeGrating(pixels: Uint8Array, width: number, height: number, spec: G
   return touched;
 }
 
-function strokeParametricBoundary(context: CanvasRenderingContext2D, outside: boolean, scale: number, weight = 1) {
+const PREVIEW_STROKE_WIDTH = 3.5;
+
+function strokeParametricBoundary(context: CanvasRenderingContext2D, outside: boolean, scale: number) {
   context.save();
   context.setLineDash([6 / scale, 4 / scale]);
-  context.lineWidth = (3.5 * weight) / scale; context.strokeStyle = '#ffffff'; context.stroke();
-  context.lineWidth = (1.5 * weight) / scale; context.strokeStyle = outside ? '#c94b42' : '#316749'; context.stroke();
+  context.lineWidth = PREVIEW_STROKE_WIDTH / scale; context.strokeStyle = '#ffffff'; context.stroke();
+  context.lineWidth = 1.5 / scale; context.strokeStyle = outside ? '#c94b42' : '#316749'; context.stroke();
   context.restore();
 }
 
@@ -309,14 +311,15 @@ function drawGratingPreview(context: CanvasRenderingContext2D, spec: GratingSpec
   const halfWidth = spec.width / 2;
   const halfHeight = spec.height / 2;
   const lineWidth = (spec.period * spec.duty) / 100;
+  context.beginPath();
+  context.rect(-halfWidth, -halfHeight, spec.width, spec.height);
   // Close guides would merge into what looks like a solid fill at this zoom.
-  if (Math.min(lineWidth, spec.period - lineWidth) * previewScale >= 3) {
+  if (Math.min(lineWidth, spec.period - lineWidth) * previewScale >= PREVIEW_STROKE_WIDTH) {
     const phase = spec.phase % spec.period;
     const firstIndex = Math.ceil((-halfWidth - phase - lineWidth / 2) / spec.period);
     const lastIndex = Math.floor((halfWidth - phase + lineWidth / 2) / spec.period);
     const lineCount = lastIndex - firstIndex + 1;
     if (lineCount <= 4096) {
-      context.beginPath();
       for (let index = firstIndex; index <= lastIndex; index += 1) {
         const center = phase + index * spec.period;
         for (const edge of [center - lineWidth / 2, center + lineWidth / 2]) {
@@ -325,10 +328,8 @@ function drawGratingPreview(context: CanvasRenderingContext2D, spec: GratingSpec
           context.lineTo(edge, halfHeight);
         }
       }
-      strokeParametricBoundary(context, outside, previewScale, 0.5);
     }
   }
-  context.beginPath(); context.rect(-halfWidth, -halfHeight, spec.width, spec.height);
   strokeParametricBoundary(context, outside, previewScale);
 }
 
