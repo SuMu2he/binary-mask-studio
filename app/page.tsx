@@ -98,8 +98,8 @@ function fromPixels(value: number, unit: SizeUnit, dpi: number) {
   return unit === 'px' ? value : (value / dpi) * 25.4;
 }
 
-function displayResolution(value: number) {
-  return Number(value.toPrecision(12));
+function formatPixelSize(value: number) {
+  return value < 0.01 ? value.toExponential(2) : value.toFixed(2);
 }
 
 function isSupportedDpi(value: number) {
@@ -712,15 +712,13 @@ export default function Home() {
   const physicalWidth = ((width / dpi) * 25.4).toFixed(2);
   const physicalHeight = ((height / dpi) * 25.4).toFixed(2);
   const canvasResolutionLabel = canvasPixelSizeUnit ? 'Pixel size' : 'DPI';
-  const canvasPixelSize = canvasPixelSizeUnit ? displayResolution(PIXEL_SIDE_UNITS_PER_INCH[canvasPixelSizeUnit] / dpi) : null;
-  const canvasResolutionValue = canvasPixelSize === null ? dpi.toFixed(2)
-    : canvasPixelSize < 0.01 ? canvasPixelSize.toExponential(2) : canvasPixelSize.toFixed(2);
+  const canvasResolutionValue = canvasPixelSizeUnit ? formatPixelSize(PIXEL_SIDE_UNITS_PER_INCH[canvasPixelSizeUnit] / dpi) : dpi.toFixed(2);
   const canvasResolutionUnit = canvasPixelSizeUnit === 'um' ? 'μm' : canvasPixelSizeUnit ?? 'DPI';
   const unitsPerInch = PIXEL_SIDE_UNITS_PER_INCH[newPixelSideUnit];
   const minPixelSide = unitsPerInch / MAX_DPI;
   const maxPixelSide = unitsPerInch / MIN_DPI;
   const displayedNewDpi = newDpi.toFixed(2);
-  const displayedPixelSide = Math.min(maxPixelSide, Math.max(minPixelSide, displayResolution(unitsPerInch / newDpi)));
+  const newPixelSide = Math.min(maxPixelSide, Math.max(minPixelSide, unitsPerInch / newDpi));
   const resolvedTriangleHeight = equilateral ? (triangleBase * Math.sqrt(3)) / 2 : triangleHeight;
   const resolvedTriangleProjection = equilateral ? triangleBase / 2 : triangleProjection;
   const geometryKind: ShapeKind = shape === 'text' || shape === 'grating' ? 'rectangle' : shape;
@@ -1413,7 +1411,7 @@ export default function Home() {
               <label className="resolution-choice"><input type="radio" name="canvas-resolution" checked={newResolutionMode === 'dpi'} onChange={() => setNewResolutionMode('dpi')} />DPI</label>
               <div className="input-shell">
                 {newResolutionMode === 'dpi'
-                  ? <NumericInput aria-label="DPI value" className="number-input" min={MIN_DPI} max={MAX_DPI} strictRange decimalPlaces={2} value={Number(displayedNewDpi)} onValueChange={(value) => { if (value !== Number(displayedNewDpi)) setNewDpi(Number(value.toFixed(2))); }} />
+                  ? <NumericInput aria-label="DPI value" className="number-input" min={MIN_DPI} max={MAX_DPI} strictRange formatValue={(value) => value.toFixed(2)} value={newDpi} onValueChange={(value) => setNewDpi(Number(value.toFixed(2)))} />
                   : <input aria-label="DPI value" className="number-input" value={displayedNewDpi} readOnly />}
                 <FieldSuffix>DPI</FieldSuffix>
               </div>
@@ -1422,9 +1420,9 @@ export default function Home() {
               <label className="resolution-choice"><input type="radio" name="canvas-resolution" checked={newResolutionMode === 'pixel'} onChange={() => setNewResolutionMode('pixel')} />Pixel size</label>
               <div className="pixel-side-row">
                 {newResolutionMode === 'pixel'
-                  ? <NumericInput key={newPixelSideUnit} aria-label="Pixel size value" className="number-input" min={minPixelSide} max={maxPixelSide} step={newPixelSideUnit === 'um' ? 0.1 : 0.0001} strictRange value={displayedPixelSide}
-                      onValueChange={(value) => { if (value !== displayedPixelSide) setNewDpi(Math.min(MAX_DPI, Math.max(MIN_DPI, unitsPerInch / value))); }} />
-                  : <input aria-label="Pixel size value" className="number-input" value={displayedPixelSide} readOnly />}
+                  ? <NumericInput key={newPixelSideUnit} aria-label="Pixel size value" className="number-input" min={minPixelSide} max={maxPixelSide} step={newPixelSideUnit === 'um' ? 0.1 : 0.0001} strictRange formatValue={formatPixelSize} value={newPixelSide}
+                      onValueChange={(value) => setNewDpi(Math.min(MAX_DPI, Math.max(MIN_DPI, unitsPerInch / value)))} />
+                  : <input aria-label="Pixel size value" className="number-input" value={formatPixelSize(newPixelSide)} readOnly />}
                 <select aria-label="Pixel size unit" value={newPixelSideUnit} onChange={(event) => setNewPixelSideUnit(event.target.value as PixelSideUnit)}><option value="um">μm</option><option value="mm">mm</option></select>
               </div>
             </div>
