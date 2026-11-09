@@ -628,7 +628,7 @@ export default function Home() {
   const [triangleHeight, setTriangleHeight] = useState((DEFAULT_SHAPE_SIZE * Math.sqrt(3)) / 2);
   const [triangleProjection, setTriangleProjection] = useState(DEFAULT_SHAPE_SIZE / 2);
   const [equilateral, setEquilateral] = useState(true);
-  const [textContent, setTextContent] = useState('Binary Mask Studio');
+  const [textContent, setTextContent] = useState('忽闻海上有仙山 山在虚无缥缈间');
   const [textFontSize, setTextFontSize] = useState(72);
   const [textFont, setTextFont] = useState<TextFont>('sans');
   const [textWeight, setTextWeight] = useState<TextWeight>('700');
