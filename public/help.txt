@@ -56,7 +56,7 @@ The topmost nontransparent pixel determines the final visible result. Merge Sele
 
 ## 6. Matrix Editing | Matrix
 
-Open the editor with the Matrix button in the toolbar. Choose Entire Layer, the default, or Current Selection. Cells cycle through transparent → 0 → 1. You can also press 0 or 1 to set a value, or Delete/Backspace for transparency. Text mode uses · for transparent pixels. The first row corresponds to the top of the canvas or selection.
+Open the editor with the Matrix button in the toolbar. Choose Entire Layer, the default, or Current Selection. Cells cycle through transparent → 0 → 1. You can also press 0 or 1 to set a value, or Delete/Backspace for transparency. Text mode accepts null or · for transparent pixels. The first row corresponds to the top of the canvas or selection.
 
 For Current Selection, the input matrix must exactly match the selection's dimensions and replaces only that area in the current layer. For Entire Layer, the dimensions must match the full canvas. Confirming the edit always creates one undo step.
 
@@ -64,7 +64,7 @@ For Current Selection, the input matrix must exactly match the selection's dimen
 
 A .bmask file stores canvas dimensions, DPI, every layer's three-state pixels, visibility, locking, and the current layer. Saving clears the unsaved-changes indicator. The app asks for confirmation before opening a project or refreshing when changes are unsaved. Importing PNG, CSV, or TXT creates a new layer aligned to the top-left corner and clips out-of-bounds areas.
 
-Set a custom export file name at the bottom right. PNG exports are strictly 1-bit binary images with DPI metadata. In CSV and TXT, the first row corresponds to the top of the image. Transparent areas are exported as 0. Large saves, exports, merges, and matrix operations show a nonblocking progress message.
+Set a custom export file name at the bottom right. All exports use the visible composite and preserve opaque black, opaque white, and full transparency. PNG includes DPI metadata and uses a transparent palette when needed. Fully opaque PNGs use 1-bit grayscale. CSV and TXT write 0 for black, 1 for white, and null for transparent pixels. The first row corresponds to the top of the image. Importing these files preserves the three pixel states. Large saves, exports, merges, and matrix operations show a nonblocking progress message.
 
 ## 8. Zoom, Pan & Shortcuts | View & Shortcuts
 

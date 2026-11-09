@@ -410,15 +410,14 @@ function regionToText(pixels: Uint8Array, canvasWidth: number, region: Selection
   return rows.join('\n');
 }
 
-function parseMatrixText(text: string, allowTransparent: boolean) {
+function parseMatrixText(text: string) {
   const cleaned = text.trim().replace(/^\s*\[/, '').replace(/\]\s*$/, '');
   const lines = cleaned.split(/[;\r\n]+/).map((line) => line.trim()).filter(Boolean);
   if (!lines.length) throw new Error('No matrix data found.');
   const rows = lines.map((line, rowIndex) => {
     const compact = line.replace(/[\s,]/g, '');
-    const compactPattern = allowTransparent ? /^[01.·]+$/ : /^[01]+$/;
-    const values = compactPattern.test(compact) ? compact.split('') : line.split(/[\s,]+/).filter(Boolean);
-    const valid = values.every((value) => value === '0' || value === '1' || (allowTransparent && (value === '.' || value === '·')));
+    const values = /^[01.·]+$/.test(compact) ? compact.split('') : line.split(/[\s,]+/).filter(Boolean);
+    const valid = values.every((value) => value === '0' || value === '1' || value === 'null' || value === '.' || value === '·');
     if (!values.length || !valid) throw new Error(`Row ${rowIndex + 1} contains unsupported content.`);
     return values.map((value) => value === '1' ? OPAQUE_ONE : value === '0' ? OPAQUE_ZERO : TRANSPARENT);
   });
@@ -441,11 +440,14 @@ function layerToText(pixels: Uint8Array, width: number, height: number) {
   return rows.join('\n');
 }
 
-function binaryToText(pixels: Uint8Array, width: number, height: number, separator: string) {
+function compositeToText({ pixels, resolved }: ReturnType<typeof compositeLayers>, width: number, height: number, separator: string) {
   const rows: string[] = [];
   for (let y = 0; y < height; y += 1) {
     const values = new Array<string>(width);
-    for (let x = 0; x < width; x += 1) values[x] = pixels[y * width + x] ? '1' : '0';
+    for (let x = 0; x < width; x += 1) {
+      const index = y * width + x;
+      values[x] = resolved[index] ? (pixels[index] ? '1' : '0') : 'null';
+    }
     rows.push(values.join(separator));
   }
   return rows.join('\n');
@@ -496,21 +498,34 @@ function pngChunk(type: string, data: Uint8Array) {
   return concatBytes([uint32(data.length), typeBytes, data, uint32(crc32(concatBytes([typeBytes, data])))]);
 }
 
-async function encodeOneBitPng(mask: Uint8Array, width: number, height: number, dpi: number) {
-  const rowBytes = Math.ceil(width / 8);
+async function encodeMaskPng({ pixels, resolved }: ReturnType<typeof compositeLayers>, width: number, height: number, dpi: number) {
+  const hasTransparency = resolved.includes(0);
+  const bitDepth = hasTransparency ? 2 : 1;
+  const samplesPerByte = 8 / bitDepth;
+  const rowBytes = Math.ceil(width / samplesPerByte);
   const raw = new Uint8Array(height * (rowBytes + 1));
   for (let y = 0; y < height; y += 1) {
-    const targetRow = y * (rowBytes + 1);
-    for (let x = 0; x < width; x += 1) if (mask[y * width + x]) raw[targetRow + 1 + (x >> 3)] |= 1 << (7 - (x & 7));
+    const targetRow = y * (rowBytes + 1) + 1;
+    for (let x = 0; x < width; x += 1) {
+      const index = y * width + x;
+      // Palette indices 0, 1 and 2 denote transparent, black and white.
+      const sample = hasTransparency ? (resolved[index] ? pixels[index] + 1 : 0) : pixels[index];
+      const shift = 8 - bitDepth * (x % samplesPerByte + 1);
+      raw[targetRow + Math.floor(x / samplesPerByte)] |= sample << shift;
+    }
   }
   const compressedStream = new Blob([raw]).stream().pipeThrough(new CompressionStream('deflate'));
   const compressed = new Uint8Array(await new Response(compressedStream).arrayBuffer());
-  const header = concatBytes([uint32(width), uint32(height), new Uint8Array([1, 0, 0, 0, 0])]);
+  const header = concatBytes([uint32(width), uint32(height), new Uint8Array([bitDepth, hasTransparency ? 3 : 0, 0, 0, 0])]);
+  const palette = hasTransparency ? [
+    pngChunk('PLTE', new Uint8Array([0, 0, 0, 0, 0, 0, 255, 255, 255])),
+    pngChunk('tRNS', new Uint8Array([0])),
+  ] : [];
   const pixelsPerMeter = Math.round(dpi / METERS_PER_INCH);
   const physical = concatBytes([uint32(pixelsPerMeter), uint32(pixelsPerMeter), new Uint8Array([1])]);
   return new Blob([concatBytes([
     new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]), pngChunk('IHDR', header),
-    pngChunk('pHYs', physical), pngChunk('IDAT', compressed), pngChunk('IEND', new Uint8Array()),
+    ...palette, pngChunk('pHYs', physical), pngChunk('IDAT', compressed), pngChunk('IEND', new Uint8Array()),
   ])], { type: 'image/png' });
 }
 
@@ -708,7 +723,8 @@ export default function Home() {
   const composite = compositeData.pixels;
   const compositeResolved = compositeData.resolved;
   const whitePixels = useMemo(() => { let count = 0; for (const value of composite) count += value; return count; }, [composite]);
-  const currentValue = composite[cursor.y * width + cursor.x] ?? 0;
+  const cursorIndex = cursor.y * width + cursor.x;
+  const currentValue = compositeResolved[cursorIndex] ? composite[cursorIndex] : 'null';
   const physicalWidth = ((width / dpi) * 25.4).toFixed(2);
   const physicalHeight = ((height / dpi) * 25.4).toFixed(2);
   const canvasResolutionLabel = canvasPixelSizeUnit ? 'Pixel size' : 'DPI';
@@ -1173,7 +1189,7 @@ export default function Home() {
     if (!requireEditableLayer()) return;
     try {
       if (matrixView === 'text') {
-        const rows = parseMatrixText(matrixText, true);
+        const rows = parseMatrixText(matrixText);
         if (rows.length !== matrixRegion.height || rows[0].length !== matrixRegion.width) throw new Error(`The current editing area is ${matrixRegion.width} × ${matrixRegion.height}. The input matrix must match it exactly.`);
         const draft = matrixDraftRef.current ?? new Uint8Array(activeLayer.pixels);
         rows.forEach((row, y) => row.forEach((value, x) => { draft[(matrixRegion.y + y) * width + matrixRegion.x + x] = value; })); matrixDraftRef.current = draft;
@@ -1198,7 +1214,7 @@ export default function Home() {
         }
         bitmap.close();
       } else {
-        const rows = parseMatrixText(await file.text(), false); const copyHeight = Math.min(height, rows.length); const copyWidth = Math.min(width, rows[0].length);
+        const rows = parseMatrixText(await file.text()); const copyHeight = Math.min(height, rows.length); const copyWidth = Math.min(width, rows[0].length);
         for (let y = 0; y < copyHeight; y += 1) for (let x = 0; x < copyWidth; x += 1) pixels[y * width + x] = rows[y][x];
       }
       addImportedLayer(pixels, file.name.replace(/\.[^.]+$/, '') || 'Imported Layer'); setToast('The file has been imported as a new layer aligned to the top-left corner. Out-of-bounds areas were clipped.');
@@ -1233,8 +1249,17 @@ export default function Home() {
     setCanvasPixelSizeUnit(newResolutionMode === 'pixel' ? newPixelSideUnit : null);
     const layer = createLayer(nextWidth, nextHeight, 'Layer 1'); layersRef.current = [layer]; setWidth(nextWidth); setHeight(nextHeight); setDpi(nextDpi); setActiveLayerId(layer.id); setSelectedLayerIds([layer.id]); setCenterX(nextWidth / 2); setCenterY(nextHeight / 2); setCursor({ x: 0, y: 0 }); setSelection(null); setBinaryClipboard(null); setPastePreview(null); setMovePreview(null); setExportBaseName(`binary-mask-${nextWidth}x${nextHeight}`); resetHistory(); bumpDocument(false); setDocumentDirty(false); setNewCanvasOpen(false); setAutoFitRequest((value) => value + 1); setToast(`Created a ${nextWidth} × ${nextHeight} canvas. Its parameters are now locked.`);
   };
-  const exportPng = () => void withProcessing('Exporting PNG', async () => { try { downloadBlob(await encodeOneBitPng(composite, width, height, dpi), `${safeExportBaseName}.png`); setToast('Exported a strictly binary 1-bit PNG.'); } catch { setToast('This browser does not support 1-bit PNG encoding.'); } });
-  const exportMatrix = (format: 'csv' | 'txt') => void withProcessing(`Exporting ${format.toUpperCase()}`, async () => { const separator = format === 'csv' ? ',' : ' '; downloadBlob(new Blob([binaryToText(composite, width, height, separator)], { type: 'text/plain;charset=utf-8' }), `${safeExportBaseName}.${format}`); setToast(`Exported a ${format.toUpperCase()} binary matrix.`); });
+  const exportPng = () => void withProcessing('Exporting PNG', async () => {
+    try {
+      downloadBlob(await encodeMaskPng(compositeData, width, height, dpi), `${safeExportBaseName}.png`);
+      setToast('Exported the mask as PNG.');
+    } catch { setToast('This browser could not encode the mask as PNG.'); }
+  });
+  const exportMatrix = (format: 'csv' | 'txt') => void withProcessing(`Exporting ${format.toUpperCase()}`, async () => {
+    const separator = format === 'csv' ? ',' : ' ';
+    downloadBlob(new Blob([compositeToText(compositeData, width, height, separator)], { type: 'text/plain;charset=utf-8' }), `${safeExportBaseName}.${format}`);
+    setToast(`Exported a ${format.toUpperCase()} mask matrix.`);
+  });
   const changeUnit = (nextUnit: SizeUnit) => { if (nextUnit === sizeUnit) return; const convert = (value: number) => fromPixels(toPixels(value, sizeUnit, dpi), nextUnit, dpi); setDimensionX(convert(dimensionX)); setDimensionY(convert(dimensionY)); setTriangleBase(convert(triangleBase)); setTriangleHeight(convert(triangleHeight)); setTriangleProjection(convert(triangleProjection)); setTextFontSize(convert(textFontSize)); setTextLetterSpacing(convert(textLetterSpacing)); setGratingWidth(convert(gratingWidth)); setGratingHeight(convert(gratingHeight)); setGratingPeriod(convert(gratingPeriod)); setGratingPhase(convert(gratingPhase)); setSizeUnit(nextUnit); };
   const toggleAspect = () => { if (!aspectLinked) setAspectRatio(dimensionX > 0 ? dimensionY / dimensionX : 1); setAspectLinked((value) => !value); };
   const updateDimensionX = (value: number) => { const next = Math.max(0.01, value || 0.01); setDimensionX(next); if (aspectLinked) setDimensionY(Math.max(0.01, next * aspectRatio)); };
@@ -1441,7 +1466,7 @@ export default function Home() {
           <div className="matrix-navigation"><label>Start X<NumericInput className="number-input" min={matrixRegion.x} max={matrixRegion.x + matrixRegion.width - 1} value={matrixStartX} onValueChange={(value) => setMatrixStartX(Math.max(matrixRegion.x, Math.min(matrixRegion.x + matrixRegion.width - 1, value || matrixRegion.x)))} /></label><label>Start Y<NumericInput className="number-input" min={matrixRegion.y} max={matrixRegion.y + matrixRegion.height - 1} value={matrixStartY} onValueChange={(value) => setMatrixStartY(Math.max(matrixRegion.y, Math.min(matrixRegion.y + matrixRegion.height - 1, value || matrixRegion.y)))} /></label><button type="button" onClick={() => setMatrixStartX(Math.max(matrixRegion.x, matrixStartX - MATRIX_COLUMNS))}>←</button><button type="button" onClick={() => setMatrixStartX(Math.min(matrixRegion.x + matrixRegion.width - 1, matrixStartX + MATRIX_COLUMNS))}>→</button><button type="button" onClick={() => setMatrixStartY(Math.max(matrixRegion.y, matrixStartY - MATRIX_ROWS))}>↑</button><button type="button" onClick={() => setMatrixStartY(Math.min(matrixRegion.y + matrixRegion.height - 1, matrixStartY + MATRIX_ROWS))}>↓</button></div>
           <div className="matrix-grid-wrap"><div className="matrix-grid" style={{ gridTemplateColumns: `46px repeat(${matrixGridColumns.length}, 34px)` }} data-version={matrixDraftVersion}><span className="corner-cell">Y / X</span>{matrixGridColumns.map((x) => <span className="axis-cell" key={`x-${x}`}>{x}</span>)}{matrixGridRows.flatMap((y) => [<span className="axis-cell row-axis" key={`y-${y}`}>{y}</span>, ...matrixGridColumns.map((x) => { const value = matrixDraftRef.current?.[y * width + x] ?? TRANSPARENT; return <button type="button" key={`${x}-${y}`} className={`matrix-cell state-${value}`} aria-label={`X ${x}, Y ${y}, ${value === OPAQUE_ONE ? '1 White' : value === OPAQUE_ZERO ? '0 Black' : 'Transparent'}`} onClick={() => setMatrixCell(x, y)} onKeyDown={(event) => { if (event.key === '0') setMatrixCell(x, y, OPAQUE_ZERO); else if (event.key === '1') setMatrixCell(x, y, OPAQUE_ONE); else if (event.key === 'Delete' || event.key === 'Backspace') setMatrixCell(x, y, TRANSPARENT); }}>{value === OPAQUE_ONE ? '1' : value === OPAQUE_ZERO ? '0' : '·'}</button>; })])}</div></div>
           <p>Click to cycle through transparent → 0 → 1. Press 0 or 1 to set a value, or Delete/Backspace to make it transparent.</p>
-        </div> : <div className="text-matrix-editor"><p>The first row corresponds to the top of the editing area. Input dimensions must match the {matrixScope === 'selection' ? 'current selection' : 'entire layer'} exactly. Spaces, commas, line breaks, and MATLAB semicolons are supported.</p><button type="button" onClick={loadMatrixText}>Load {matrixScope === 'selection' ? 'Selection' : 'Layer'} Text</button><textarea value={matrixText} onChange={(event) => setMatrixText(event.target.value)} spellCheck={false} placeholder={'· · · · ·\n· 0 1 0 ·\n· 1 1 1 ·\n· · · · ·'} /></div>}
+        </div> : <div className="text-matrix-editor"><p>The first row corresponds to the top of the editing area. Input dimensions must match the {matrixScope === 'selection' ? 'current selection' : 'entire layer'} exactly. Use 0 for black, 1 for white, and null or · for transparency. Spaces, commas, line breaks, and MATLAB semicolons are supported.</p><button type="button" onClick={loadMatrixText}>Load {matrixScope === 'selection' ? 'Selection' : 'Layer'} Text</button><textarea value={matrixText} onChange={(event) => setMatrixText(event.target.value)} spellCheck={false} placeholder={'· · · · ·\n· 0 1 0 ·\n· 1 1 1 ·\n· · · · ·'} /></div>}
         <div className="modal-footer"><span>All changes are saved as one undo step when you confirm.</span><button type="button" onClick={() => setMatrixOpen(false)}>Cancel</button><button className="modal-primary" type="button" disabled={activeLayer.locked} onClick={applyMatrixEditor}>Apply to Current Layer</button></div>
       </section></div>}
       {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} quote={quote} />}
