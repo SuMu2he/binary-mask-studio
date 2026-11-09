@@ -1402,9 +1402,12 @@ export default function Home() {
           <div className="field-grid two-columns">
             <div>
               <label className="resolution-choice"><input type="radio" name="canvas-resolution" checked={newResolutionMode === 'dpi'} onChange={() => setNewResolutionMode('dpi')} />DPI</label>
-              {newResolutionMode === 'dpi'
-                ? <NumericInput aria-label="DPI value" className="number-input" min={MIN_DPI} max={MAX_DPI} strictRange value={displayedNewDpi} onValueChange={(value) => { if (value !== displayedNewDpi) setNewDpi(value); }} />
-                : <input aria-label="DPI value" className="number-input" value={displayedNewDpi} readOnly />}
+              <div className="input-shell">
+                {newResolutionMode === 'dpi'
+                  ? <NumericInput aria-label="DPI value" className="number-input" min={MIN_DPI} max={MAX_DPI} strictRange value={displayedNewDpi} onValueChange={(value) => { if (value !== displayedNewDpi) setNewDpi(value); }} />
+                  : <input aria-label="DPI value" className="number-input" value={displayedNewDpi} readOnly />}
+                <FieldSuffix>DPI</FieldSuffix>
+              </div>
             </div>
             <div>
               <label className="resolution-choice"><input type="radio" name="canvas-resolution" checked={newResolutionMode === 'pixel'} onChange={() => setNewResolutionMode('pixel')} />Pixel size</label>
