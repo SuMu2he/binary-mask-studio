@@ -724,17 +724,13 @@ export default function Home() {
     }
   }
   const gratingAliased = shape === 'grating' && gratingPeriodPixels < 2;
-  const gratingCycleCount = gratingPeriodPixels > 0 ? gratingWidthPixels / gratingPeriodPixels : 0;
   const clippedRange = useMemo(() => pixelBounds(bounds, width, height), [bounds, height, width]);
   const partiallyOutside = hasParametricContent && (bounds.minX < 0 || bounds.minY < 0 || bounds.maxX > width || bounds.maxY > height);
-  const displayBounds = !hasParametricContent ? (shape === 'text' ? 'Enter text' : 'Invalid parameters') : clippedRange.hasIntersection ? `X ${clippedRange.minX}–${clippedRange.maxX} · Y ${clippedRange.minY}–${clippedRange.maxY}` : 'No intersection with the canvas';
   const parametricLabel = shape === 'text' ? 'Text' : shape === 'grating' ? 'Grating' : 'Shape';
-  const parametricHint = !hasParametricContent ? (shape === 'text' ? 'Text cannot be empty' : 'Width, height, and period must be greater than 0')
-    : !clippedRange.hasIntersection ? `${parametricLabel} is entirely outside the canvas`
-      : shape === 'grating' ? `${partiallyOutside ? 'Out-of-bounds areas will be clipped when applied · ' : ''}Period ${gratingPeriodPixels.toFixed(2)} px · Approx. ${gratingCycleCount.toFixed(2)} cycles${gratingAliased ? ' · Period below 2 px may cause aliasing' : ''}`
-        : partiallyOutside ? 'Out-of-bounds areas will be clipped when applied'
-          : shape === 'text' ? `Font size ${textFontSizePixels.toFixed(2)} px · Letter spacing ${textLetterSpacingPixels.toFixed(2)} px`
-            : `Approx. pixel size ${sizeX.toFixed(2)} × ${sizeY.toFixed(2)} px`;
+  const parametricWarning = !hasParametricContent
+    ? (shape === 'text' ? 'Enter text to apply.' : 'Width, height, and period must be greater than 0.')
+    : !clippedRange.hasIntersection ? `${parametricLabel} is entirely outside the canvas.`
+      : partiallyOutside ? 'Out-of-bounds areas will be clipped when applied.' : '';
 
   const snapshotCurrent = (): HistorySnapshot => ({ layers: layersRef.current.map(cloneLayer), activeLayerId, selectedLayerIds: [...selectedLayerIds] });
   const snapshotBytes = (snapshot: HistorySnapshot) => snapshot.layers.reduce((sum, layer) => sum + layer.pixels.byteLength, 0);
@@ -1320,7 +1316,8 @@ export default function Home() {
           </>}
           <div className="shape-unit-row"><label>Units<select value={sizeUnit} onChange={(event) => changeUnit(event.target.value as SizeUnit)}><option value="px">px</option><option value="mm">mm</option></select></label><label>Rotation<div className="input-shell"><NumericInput className="number-input" step="1" value={rotation} onValueChange={(value) => setRotation(value || 0)} /><FieldSuffix>°</FieldSuffix></div></label></div>
           {shape === 'grating' ? <><label>Write mode<select value={gratingWriteMode} onChange={(event) => setGratingWriteMode(event.target.value as GratingWriteMode)}><option value="cover">Full coverage</option><option value="lines">Lines only</option></select></label>{gratingWriteMode === 'cover' ? <label>Polarity<select value={gratingPolarity} onChange={(event) => setGratingPolarity(event.target.value as GratingPolarity)}><option value="line1">Lines 1 · Gaps 0</option><option value="line0">Lines 0 · Gaps 1</option></select></label> : <label>Line operation<select value={operation} onChange={(event) => setOperation(event.target.value as BooleanOperation)}><option value="set1">Set 1</option><option value="set0">Set 0</option><option value="xor">XOR</option></select></label>}</> : <label>Boolean operation<select value={operation} onChange={(event) => setOperation(event.target.value as BooleanOperation)}><option value="set1">Set 1</option><option value="set0">Set 0</option><option value="xor">XOR</option></select></label>}
-          <div className={`shape-readout ${!hasParametricContent || !clippedRange.hasIntersection ? 'error' : partiallyOutside || gratingAliased ? 'warning' : ''}`}><span>{shape === 'text' ? 'Text pixel bounds' : shape === 'grating' ? 'Grating pixel bounds' : 'Pixel bounds within canvas'}</span><strong>{displayBounds}</strong><small>{parametricHint}</small></div>
+          {parametricWarning && <p className="shape-warning">{parametricWarning}</p>}
+          {hasParametricContent && clippedRange.hasIntersection && gratingAliased && <p className="shape-warning">Period below 2 px may cause aliasing.</p>}
           <button className="primary-button" type="button" disabled={!hasParametricContent || !clippedRange.hasIntersection || activeLayer.locked || Boolean(processing)} onClick={applyShape}>Apply {parametricLabel} to Layer <span>↗</span></button>
           </section>
         </aside>
