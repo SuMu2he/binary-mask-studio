@@ -290,41 +290,37 @@ function writeGrating(pixels: Uint8Array, width: number, height: number, spec: G
   return touched;
 }
 
-function strokeParametricBoundary(context: CanvasRenderingContext2D, outside: boolean, scale: number) {
+function strokeParametricBoundary(context: CanvasRenderingContext2D, outside: boolean, scale: number, weight = 1) {
   context.save();
   context.setLineDash([6 / scale, 4 / scale]);
-  context.lineWidth = 3.5 / scale; context.strokeStyle = '#ffffff'; context.stroke();
-  context.lineWidth = 1.5 / scale; context.strokeStyle = outside ? '#c94b42' : '#316749'; context.stroke();
+  context.lineWidth = (3.5 * weight) / scale; context.strokeStyle = '#ffffff'; context.stroke();
+  context.lineWidth = (1.5 * weight) / scale; context.strokeStyle = outside ? '#c94b42' : '#316749'; context.stroke();
   context.restore();
 }
 
-function drawGratingPreview(context: CanvasRenderingContext2D, spec: GratingSpec, mode: GratingWriteMode, polarity: GratingPolarity, operation: BooleanOperation, outside: boolean, previewScale: number) {
+function drawGratingPreview(context: CanvasRenderingContext2D, spec: GratingSpec, outside: boolean, previewScale: number) {
   const halfWidth = spec.width / 2;
   const halfHeight = spec.height / 2;
   const lineWidth = (spec.period * spec.duty) / 100;
-  context.save();
-  context.beginPath(); context.rect(-halfWidth, -halfHeight, spec.width, spec.height); context.clip();
-  context.globalAlpha = 0.72;
-  if (mode === 'cover') {
-    context.fillStyle = polarity === 'line1' ? '#000' : '#fff';
-    context.fillRect(-halfWidth, -halfHeight, spec.width, spec.height);
-  }
-  if (spec.duty > 0) {
-    const firstIndex = Math.floor((-halfWidth - spec.phase - lineWidth / 2) / spec.period) - 1;
-    const lastIndex = Math.ceil((halfWidth - spec.phase + lineWidth / 2) / spec.period) + 1;
+  // Close guides would merge into what looks like a solid fill at this zoom.
+  if (Math.min(lineWidth, spec.period - lineWidth) * previewScale >= 3) {
+    const phase = spec.phase % spec.period;
+    const firstIndex = Math.ceil((-halfWidth - phase - lineWidth / 2) / spec.period);
+    const lastIndex = Math.floor((halfWidth - phase + lineWidth / 2) / spec.period);
     const lineCount = lastIndex - firstIndex + 1;
-    context.fillStyle = mode === 'cover' ? (polarity === 'line1' ? '#fff' : '#000') : operation === 'set1' ? '#fff' : operation === 'set0' ? '#000' : '#c7ff3d';
     if (lineCount <= 4096) {
+      context.beginPath();
       for (let index = firstIndex; index <= lastIndex; index += 1) {
-        const lineCenter = spec.phase + index * spec.period;
-        context.fillRect(lineCenter - lineWidth / 2, -halfHeight, lineWidth, spec.height);
+        const center = phase + index * spec.period;
+        for (const edge of [center - lineWidth / 2, center + lineWidth / 2]) {
+          if (edge <= -halfWidth || edge >= halfWidth) continue;
+          context.moveTo(edge, -halfHeight);
+          context.lineTo(edge, halfHeight);
+        }
       }
-    } else {
-      context.globalAlpha = mode === 'cover' ? 0.34 : 0.22;
-      context.fillRect(-halfWidth, -halfHeight, spec.width, spec.height);
+      strokeParametricBoundary(context, outside, previewScale, 0.5);
     }
   }
-  context.restore();
   context.beginPath(); context.rect(-halfWidth, -halfHeight, spec.width, spec.height);
   strokeParametricBoundary(context, outside, previewScale);
 }
@@ -807,18 +803,14 @@ export default function Home() {
       context.save(); context.translate(centerX, centerY); context.rotate((-rotation * Math.PI) / 180);
       if (shape === 'text') {
         const layout = measureTextLayout(context, textSpec);
-        context.setLineDash([]);
-        context.lineWidth = Math.max(1, textFontSizePixels / 64);
+        context.setLineDash([3 / previewScale, 2 / previewScale]);
+        context.lineWidth = Math.min(1 / previewScale, textFontSizePixels / 32);
         context.strokeStyle = partiallyOutside ? '#c94b42' : '#316749';
-        context.fillStyle = operation === 'set0' ? 'rgba(0,0,0,.78)' : operation === 'xor' ? 'rgba(199,255,61,.58)' : 'rgba(255,255,255,.82)';
         drawTextLayout(context, layout, 'stroke');
-        drawTextLayout(context, layout, 'fill');
-        context.setLineDash([Math.max(5, width / 240), Math.max(4, width / 300)]);
-        context.lineWidth = Math.max(1.5, width / 900);
         context.beginPath(); context.rect(layout.bounds.minX, layout.bounds.minY, layout.bounds.maxX - layout.bounds.minX, layout.bounds.maxY - layout.bounds.minY);
         strokeParametricBoundary(context, partiallyOutside, previewScale);
       } else if (shape === 'grating') {
-        drawGratingPreview(context, gratingSpec, gratingWriteMode, gratingPolarity, operation, partiallyOutside, previewScale);
+        drawGratingPreview(context, gratingSpec, partiallyOutside, previewScale);
       } else {
         context.beginPath();
         if (shape === 'circle') context.ellipse(0, 0, sizeX / 2, sizeY / 2, 0, 0, Math.PI * 2);
@@ -879,7 +871,7 @@ export default function Home() {
       if (tool === 'erase') { context.beginPath(); context.moveTo(cursor.x - radius * .34, cursor.y + radius * .34); context.lineTo(cursor.x + radius * .34, cursor.y - radius * .34); context.strokeStyle = '#d6574d'; context.stroke(); }
       context.restore();
     }
-  }, [brushSize, centerX, centerY, cursor, gratingPolarity, gratingSpec, gratingWriteMode, hasParametricContent, height, movePreview, operation, paintValue, partiallyOutside, pastePreview, rotation, selection, selectionDraft, shape, shapeSpec, sizeX, sizeY, textFontSizePixels, textSpec, tool, width, zoom]);
+  }, [brushSize, centerX, centerY, cursor, gratingSpec, hasParametricContent, height, movePreview, paintValue, partiallyOutside, pastePreview, rotation, selection, selectionDraft, shape, shapeSpec, sizeX, sizeY, textFontSizePixels, textSpec, tool, width, zoom]);
 
   useEffect(() => { if (!toast) return; const timeout = window.setTimeout(() => setToast(''), 3200); return () => window.clearTimeout(timeout); }, [toast]);
   useEffect(() => {
