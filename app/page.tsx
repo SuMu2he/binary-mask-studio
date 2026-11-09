@@ -1425,7 +1425,14 @@ export default function Home() {
             <div className="export-transparency">
               <label><input type="checkbox" checked={exportTransparency} onChange={(event) => setExportTransparency(event.target.checked)}
                 aria-describedby={exportTransparency ? undefined : 'export-transparency-warning'} />Export transparency</label>
-              {!exportTransparency && <span id="export-transparency-warning" className="export-transparency-warning" role="status">Transparent pixels export as black (0).</span>}
+              {!exportTransparency && <span id="export-transparency-warning" className="export-transparency-warning" role="status">
+                <svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+                  <circle cx="8" cy="8" r="6.5" />
+                  <path d="M8 4.8v3.7" />
+                  <circle cx="8" cy="11" r=".8" fill="currentColor" stroke="none" />
+                </svg>
+                <span>Transparent pixels will export as BLACK (0).</span>
+              </span>}
             </div>
             <div className="download-row"><button type="button" disabled={Boolean(processing)} onClick={exportPng}>Export PNG</button><button type="button" disabled={Boolean(processing)} onClick={() => exportMatrix('csv')}>Export CSV</button><button type="button" disabled={Boolean(processing)} onClick={() => exportMatrix('txt')}>Export TXT</button></div>
           </section>

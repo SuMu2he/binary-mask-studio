@@ -238,7 +238,8 @@ input:disabled { background: #eef1ed; color: #737e78; -webkit-text-fill-color: #
 .export-transparency { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 10px; margin-bottom: 9px; }
 .export-transparency label { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--ink); cursor: pointer; }
 .export-transparency input { flex: none; width: 14px; height: 14px; margin: 0; accent-color: var(--ink); }
-.export-transparency-warning { color: #a8362f; font-size: 10px; font-weight: 700; }
+.export-transparency-warning { display: inline-flex; align-items: start; gap: 4px; color: #a8362f; font-size: 10px; font-weight: 700; }
+.export-transparency-warning svg { flex: none; width: 12px; height: 12px; margin-top: 1px; }
 
 .modal-backdrop { position: fixed; z-index: 30; inset: 0; display: grid; place-items: center; padding: 24px; background: rgba(9,18,15,.67); backdrop-filter: blur(6px); }
 .dialog-card { width: min(520px, 100%); max-height: calc(100vh - 48px); padding: 22px; overflow: auto; border: 1px solid rgba(255,255,255,.25); border-radius: 15px; background: var(--panel); box-shadow: 0 30px 90px rgba(0,0,0,.3); }
