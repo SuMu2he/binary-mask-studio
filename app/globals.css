@@ -57,11 +57,8 @@ input[type="number"]::-webkit-outer-spin-button { appearance: none; margin: 0; }
 .right-sidebar { grid-template-rows: minmax(var(--min-layer-panel-height), 1fr) var(--splitter-size) var(--inspector-panel-height); }
 .panel { min-width: 0; padding: 17px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
 .settings-panel { min-height: 0; overflow: auto; }
-.panel-heading { display: flex; align-items: center; gap: 10px; margin-bottom: 17px; }
+.panel-heading { display: flex; align-items: center; gap: 10px; margin: 0 0 17px; font-size: 13px; font-weight: 700; }
 .panel-heading > span { display: grid; place-items: center; flex: 0 0 auto; width: 28px; height: 28px; border-radius: 7px; background: var(--ink); color: var(--accent); font: 700 10px ui-monospace, monospace; }
-.panel-heading div { min-width: 0; display: grid; }
-.panel-heading strong { font-size: 13px; }
-.panel-heading small { margin-top: 1px; color: #8b9690; font-size: 8px; letter-spacing: .16em; }
 .panel-splitter { position: relative; display: flex; align-items: center; justify-content: center; border-radius: 5px; touch-action: none; user-select: none; outline: none; min-width: 0; min-height: 0; }
 .panel-splitter::before, .panel-splitter::after { content: ""; position: absolute; border-radius: 999px; pointer-events: none; }
 .panel-splitter::before { background: #d0dace; }

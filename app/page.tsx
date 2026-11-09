@@ -566,8 +566,8 @@ function LayerThumbnail({ layer, width, height, version }: { layer: Layer; width
   return <canvas ref={ref} width={54} height={32} aria-hidden="true" />;
 }
 
-function SectionHeading({ number, title, subtitle }: { number: string; title: string; subtitle: string }) {
-  return <div className="panel-heading"><span>{number}</span><div><strong>{title}</strong><small>{subtitle}</small></div></div>;
+function SectionHeading({ number, title }: { number: string; title: string }) {
+  return <h2 className="panel-heading"><span>{number}</span>{title}</h2>;
 }
 
 function FieldSuffix({ children }: { children: React.ReactNode }) { return <span className="field-suffix">{children}</span>; }
@@ -1272,7 +1272,7 @@ export default function Home() {
       <section className="workspace" ref={layout.workspaceRef} style={layout.style}>
         <aside className="left-sidebar" id="settings-column" ref={layout.leftRef}>
           <section className="panel settings-panel" id="canvas-settings">
-          <SectionHeading number="01" title="Canvas" subtitle="CANVAS" />
+          <SectionHeading number="01" title="Canvas" />
           <div className="canvas-parameter-stack">
             <div className="field-grid two-columns compact-fields"><label>Width<div className="input-shell"><input type="number" value={width} disabled /><FieldSuffix>px</FieldSuffix></div></label><label>Height<div className="input-shell"><input type="number" value={height} disabled /><FieldSuffix>px</FieldSuffix></div></label></div>
             <div className="dpi-row"><label>DPI<div className="input-shell"><input type="number" value={dpi} disabled /></div></label><button type="button" onClick={() => { setNewWidth(width); setNewHeight(height); setNewDpi(dpi); setNewCanvasOpen(true); }}>New Canvas</button></div>
@@ -1281,7 +1281,7 @@ export default function Home() {
           </section>
           <PanelSplitter orientation="horizontal" label="Resize Canvas and Parametric Shapes" controls="canvas-settings parametric-shapes" {...layout.canvas} />
           <section ref={shapeFieldsRef} className="panel settings-panel" id="parametric-shapes" onFocusCapture={() => setTool('shape')}>
-          <SectionHeading number="02" title="Parametric Shapes" subtitle="PARAMETRIC SHAPE" />
+          <SectionHeading number="02" title="Parametric Shapes" />
           <label>Shape type<select value={shape} onChange={(event) => setShape(event.target.value as ParametricKind)}><option value="circle">Circle</option><option value="triangle">Triangle</option><option value="rectangle">Rectangle</option><option value="text">Text</option><option value="grating">Grating</option></select></label>
           <div className="field-grid two-columns"><label>Center X<NumericInput className="number-input" step="0.5" value={centerX} onValueChange={(value) => setCenterX(value)} /></label><label>Center Y<NumericInput className="number-input" step="0.5" value={centerY} onValueChange={(value) => setCenterY(value)} /></label></div>
           {shape === 'text' ? <>
@@ -1341,7 +1341,7 @@ export default function Home() {
 
         <PanelSplitter orientation="vertical" className="right-column-splitter" label="Resize image and inspector columns" controls="image-column inspector-column" {...layout.right} />
         <aside className="right-sidebar" id="inspector-column" ref={layout.rightRef}>
-          <section className="panel layer-panel" id="layers-panel"><SectionHeading number="03" title="Layers" subtitle="LAYERS" />
+          <section className="panel layer-panel" id="layers-panel"><SectionHeading number="03" title="Layers" />
             <div className="layer-actions primary-actions"><div className="layer-create-control" ref={layerCreateRef}><button type="button" aria-haspopup="menu" aria-expanded={layerCreateMenuOpen} onClick={() => setLayerCreateMenuOpen((open) => !open)}>New</button>{layerCreateMenuOpen && <div className="layer-create-menu" role="menu" aria-label="New layer type"><button type="button" role="menuitem" onClick={() => addLayer(TRANSPARENT)}><i className="layer-fill-swatch transparent" aria-hidden="true" /><span>Transparent Layer</span></button><button type="button" role="menuitem" onClick={() => addLayer(OPAQUE_ZERO)}><i className="layer-fill-swatch zero" aria-hidden="true" /><span>Black 0 Layer</span></button><button type="button" role="menuitem" onClick={() => addLayer(OPAQUE_ONE)}><i className="layer-fill-swatch one" aria-hidden="true" /><span>White 1 Layer</span></button></div>}</div><button type="button" onClick={duplicateSelectedLayers}>Duplicate</button><button type="button" disabled={selectedLayerIds.length < 2} onClick={mergeSelectedLayers}>Merge Selected</button></div>
             <div className="layer-list" aria-label="Layer list">{layerList.map((layer, index) => {
               const selected = selectedSet.has(layer.id); const active = layer.id === activeLayerId;
@@ -1356,7 +1356,7 @@ export default function Home() {
             <button className="clear-all-button" type="button" onClick={clearAllLayers}>Clear All Layers</button>
           </section>
           <PanelSplitter orientation="horizontal" label="Resize Layers and Pixel Inspector" controls="layers-panel pixel-inspector" {...layout.layers} />
-          <section className="panel inspector-panel" id="pixel-inspector"><SectionHeading number="04" title="Pixel Inspector" subtitle="INSPECTOR" />
+          <section className="panel inspector-panel" id="pixel-inspector"><SectionHeading number="04" title="Pixel Inspector" />
             <div className="coordinate-card"><small>Current pixel · Top-left origin</small><div><span>X</span><strong>{cursor.x}</strong><span>Y</span><strong>{cursor.y}</strong></div><p>Pixel value <b>{currentValue}</b></p></div>
             <div className="metric-list"><div><span>White pixels</span><strong>{whitePixels.toLocaleString('en-US')} ({((whitePixels / (width * height)) * 100).toFixed(4)}%)</strong></div><div><span>Total pixels</span><strong>{(width * height).toLocaleString('en-US')}</strong></div></div>
             <label className="export-name">Export file name<input value={exportBaseName} onChange={(event) => setExportBaseName(event.target.value)} onBlur={() => setExportBaseName(safeExportBaseName)} /></label>
