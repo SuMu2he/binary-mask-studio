@@ -1266,7 +1266,7 @@ export default function Home() {
   return (
     <main className="app-shell">
       <header className="topbar">
-        <button className="brand" type="button" aria-label={dirty ? 'Refresh page; unsaved changes' : 'Refresh page'} onClick={refreshFromLogo}><span className="brand-mark" aria-hidden="true"><i /><i /><i /><i /></span><span><strong>Binary Mask Studio{dirty ? <i className="dirty-dot" title="Unsaved changes" /> : null}</strong><small>BINARY MASK STUDIO</small></span></button>
+        <button className="brand" type="button" aria-label={dirty ? 'Refresh page; unsaved changes' : 'Refresh page'} onClick={refreshFromLogo}><span className="brand-mark" aria-hidden="true"><i /><i /><i /><i /></span><span><strong>Binary Mask Studio{dirty ? <i className="dirty-dot" title="Unsaved changes" /> : null}</strong><small>PIXEL-PRECISE EDITING</small></span></button>
         <div className="topbar-actions"><button type="button" aria-label="Help" title="Help" onClick={() => void openInfoWindow('help')}>?</button><button type="button" aria-label="Application information" title="Application information" onClick={() => void openInfoWindow('about')}>!</button></div>
       </header>
       <section className="workspace" ref={layout.workspaceRef} style={layout.style}>
