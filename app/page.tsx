@@ -1303,7 +1303,7 @@ export default function Home() {
           <SectionHeading number="01" title="Canvas" />
           <div className="canvas-parameter-stack">
             <div className="field-grid two-columns compact-fields"><label>Width<div className="input-shell"><input type="number" value={width} disabled /><FieldSuffix>px</FieldSuffix></div></label><label>Height<div className="input-shell"><input type="number" value={height} disabled /><FieldSuffix>px</FieldSuffix></div></label></div>
-            <div className="dpi-row"><label>DPI<div className="input-shell"><input type="number" value={displayResolution(dpi)} disabled /></div></label><button type="button" onClick={() => { setNewWidth(width); setNewHeight(height); setNewDpi(dpi); setNewResolutionMode('dpi'); setNewPixelSideUnit('um'); setNewCanvasOpen(true); }}>New Canvas</button></div>
+            <div className="dpi-row"><label>DPI<div className="input-shell"><input type="number" value={displayResolution(dpi)} disabled /></div></label><button type="button" onClick={() => { setNewWidth(width); setNewHeight(height); setNewDpi(dpi); setNewPixelSideUnit('um'); setNewCanvasOpen(true); }}>New Canvas</button></div>
             <div className="physical-size"><span>Physical size</span><strong>{physicalWidth} × {physicalHeight} mm</strong></div>
           </div>
           </section>
@@ -1407,13 +1407,13 @@ export default function Home() {
                 : <input aria-label="DPI value" className="number-input" value={displayedNewDpi} readOnly />}
             </div>
             <div>
-              <label className="resolution-choice"><input type="radio" name="canvas-resolution" checked={newResolutionMode === 'pixel'} onChange={() => setNewResolutionMode('pixel')} />Pixel side length</label>
+              <label className="resolution-choice"><input type="radio" name="canvas-resolution" checked={newResolutionMode === 'pixel'} onChange={() => setNewResolutionMode('pixel')} />Pixel size</label>
               <div className="pixel-side-row">
                 {newResolutionMode === 'pixel'
-                  ? <NumericInput key={newPixelSideUnit} aria-label="Pixel side length value" className="number-input" min={minPixelSide} max={maxPixelSide} step={newPixelSideUnit === 'um' ? 0.1 : 0.0001} strictRange value={displayedPixelSide}
+                  ? <NumericInput key={newPixelSideUnit} aria-label="Pixel size value" className="number-input" min={minPixelSide} max={maxPixelSide} step={newPixelSideUnit === 'um' ? 0.1 : 0.0001} strictRange value={displayedPixelSide}
                       onValueChange={(value) => { if (value !== displayedPixelSide) setNewDpi(Math.min(MAX_DPI, Math.max(MIN_DPI, unitsPerInch / value))); }} />
-                  : <input aria-label="Pixel side length value" className="number-input" value={displayedPixelSide} readOnly />}
-                <select aria-label="Pixel side length unit" value={newPixelSideUnit} onChange={(event) => setNewPixelSideUnit(event.target.value as PixelSideUnit)}><option value="um">μm</option><option value="mm">mm</option></select>
+                  : <input aria-label="Pixel size value" className="number-input" value={displayedPixelSide} readOnly />}
+                <select aria-label="Pixel size unit" value={newPixelSideUnit} onChange={(event) => setNewPixelSideUnit(event.target.value as PixelSideUnit)}><option value="um">μm</option><option value="mm">mm</option></select>
               </div>
             </div>
           </div>
