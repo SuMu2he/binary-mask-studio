@@ -2,7 +2,7 @@
 > QUICK START & COMPLETE MANUAL
 
 ## One-Minute Quick Start
-1. Click New Canvas and set the width, height, and DPI. These settings are locked for the project after creation.
+1. Click New Canvas and set the width and height. Set the resolution by DPI or by the side length of one pixel. These settings are locked for the project after creation.
 2. Under Parametric Shapes on the left, choose a shape, text, or grating and enter its center, dimensions, layout, and rotation. You can also choose Draw from the toolbar.
 3. Use the Layers panel on the right to control visibility, locking, and stacking order. A gray-and-white checkerboard indicates transparency.
 4. Use a selection to limit painting, copy the final visible result, or move selected content within the current layer.
@@ -12,7 +12,9 @@
 
 The origin is the top-left corner of the canvas. X increases to the right and Y increases downward, matching the rows and columns of exported matrices. For a canvas of width W and height H, valid pixel coordinates are X=0–W−1 and Y=0–H−1. The right edge at X=W and bottom edge at Y=H are geometric boundaries, not writable pixels.
 
-Set the width, height, and DPI when creating a canvas. These settings cannot be changed directly afterward, and every layer always matches the canvas dimensions. DPI determines physical dimensions and PNG metadata; it does not change the pixel matrix. The final visible composite is used for inspection and export, and is not edited directly.
+Set the width, height, and resolution when creating a canvas. Choose either DPI or Pixel side length to edit. The other field updates automatically. Pixel side length defaults to μm, and you can switch to mm without changing the physical size. For square pixels, DPI equals 25,400 divided by the side length in μm (or 25.4 divided by the side length in mm).
+
+Canvas dimensions and resolution are locked after creation, and every layer matches the canvas dimensions. Resolution determines physical dimensions and PNG metadata without changing the pixel matrix. The final visible composite is used for inspection and export, and is not edited directly.
 
 All editable numeric fields support basic arithmetic, such as 1920/2, 540+100, or (540+100)/2, using +, -, *, /, decimals, and parentheses. The expression remains visible while you type; press Enter or leave the field to show the result. Parameter limits, linked dimensions, and unit rules still apply. Invalid expressions or division by zero are highlighted in red. Correct them before creating a canvas or applying a shape.
 

@@ -7,6 +7,7 @@ type NumericInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | '
   value: number;
   onValueChange: (value: number) => void;
   suffix?: string;
+  strictRange?: boolean;
 };
 
 const invalidMessage = 'Enter a valid number or arithmetic expression. Division by zero is not allowed.';
@@ -23,22 +24,23 @@ export function validateNumericInputs(scope: HTMLElement | null): boolean {
   return true;
 }
 
-export default function NumericInput({ value, onValueChange, suffix = '', min, max, step = 1, ...props }: NumericInputProps) {
+export default function NumericInput({ value, onValueChange, suffix = '', min, max, step = 1, strictRange = false, ...props }: NumericInputProps) {
   const [draft, setDraft] = useState<string | null>(null);
-  const [invalid, setInvalid] = useState(false);
+  const [error, setError] = useState('');
   const parse = (text: string) => evaluateNumericExpression(suffix && text.trimEnd().endsWith(suffix) ? text.trimEnd().slice(0, -suffix.length) : text);
   const normalize = (next: number) => Math.max(min === undefined ? -Infinity : Number(min), Math.min(max === undefined ? Infinity : Number(max), next));
   const update = (text: string, input: HTMLInputElement, commit: boolean) => {
     const result = parse(text);
-    input.setCustomValidity(result === null ? invalidMessage : '');
-    setInvalid(result === null);
-    setDraft(result !== null && commit ? null : text);
-    if (result !== null) onValueChange(normalize(result));
-    return result !== null;
+    const message = result === null ? invalidMessage : strictRange && result !== normalize(result) ? 'Enter a value within the supported resolution range.' : '';
+    input.setCustomValidity(message);
+    setError(message);
+    setDraft(!message && commit ? null : text);
+    if (result !== null && !message) onValueChange(normalize(result));
+    return !message;
   };
 
-  return <input {...props} type="text" data-numeric-input="" value={draft ?? `${value}${suffix}`} aria-invalid={invalid || undefined}
-    title={invalid ? invalidMessage : (props.title ?? 'Supports +, -, *, /, and parentheses. Press Enter or leave the field to show the result.')}
+  return <input {...props} type="text" data-numeric-input="" value={draft ?? `${value}${suffix}`} aria-invalid={Boolean(error) || undefined}
+    title={error || (props.title ?? 'Supports +, -, *, /, and parentheses. Press Enter or leave the field to show the result.')}
     spellCheck={false} autoComplete="off" maxLength={256}
     onChange={(event) => update(event.target.value, event.currentTarget, false)}
     onBlur={(event) => { update(event.currentTarget.value, event.currentTarget, true); }}
@@ -50,13 +52,13 @@ export default function NumericInput({ value, onValueChange, suffix = '', min, m
         else event.currentTarget.reportValidity();
       } else if (event.key === 'Escape') {
         event.preventDefault(); event.stopPropagation();
-        event.currentTarget.setCustomValidity(''); setInvalid(false); setDraft(null);
+        event.currentTarget.setCustomValidity(''); setError(''); setDraft(null);
         event.currentTarget.value = `${value}${suffix}`; event.currentTarget.blur();
       } else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
         event.preventDefault();
         const increment = step === 'any' ? 1 : Number(step);
         const next = normalize((parse(event.currentTarget.value) ?? value) + (event.key === 'ArrowUp' ? increment : -increment));
-        update(String(Number(next.toPrecision(12))), event.currentTarget, true);
+        update(String(normalize(Number(next.toPrecision(12)))), event.currentTarget, true);
       }
     }} />;
 }
