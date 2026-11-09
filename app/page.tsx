@@ -712,7 +712,7 @@ export default function Home() {
   const unitsPerInch = PIXEL_SIDE_UNITS_PER_INCH[newPixelSideUnit];
   const minPixelSide = unitsPerInch / MAX_DPI;
   const maxPixelSide = unitsPerInch / MIN_DPI;
-  const displayedNewDpi = Math.min(MAX_DPI, Math.max(MIN_DPI, displayResolution(newDpi)));
+  const displayedNewDpi = newDpi.toFixed(2);
   const displayedPixelSide = Math.min(maxPixelSide, Math.max(minPixelSide, displayResolution(unitsPerInch / newDpi)));
   const resolvedTriangleHeight = equilateral ? (triangleBase * Math.sqrt(3)) / 2 : triangleHeight;
   const resolvedTriangleProjection = equilateral ? triangleBase / 2 : triangleProjection;
@@ -1224,7 +1224,7 @@ export default function Home() {
     if (nextWidth < 1 || nextHeight < 1 || nextWidth > MAX_DIMENSION || nextHeight > MAX_DIMENSION) { setToast(`Width and height must be between 1 and ${MAX_DIMENSION}.`); return; }
     if (!isSupportedDpi(nextDpi)) { setToast('The canvas resolution is outside the supported range.'); return; }
     if (dirtyRef.current && !window.confirm('This project has unsaved changes. Create a new canvas and discard them?')) return;
-    const layer = createLayer(nextWidth, nextHeight, 'Layer 1'); layersRef.current = [layer]; setWidth(nextWidth); setHeight(nextHeight); setDpi(nextDpi); setActiveLayerId(layer.id); setSelectedLayerIds([layer.id]); setCenterX(nextWidth / 2); setCenterY(nextHeight / 2); setCursor({ x: 0, y: 0 }); setSelection(null); setBinaryClipboard(null); setPastePreview(null); setMovePreview(null); setExportBaseName(`binary-mask-${nextWidth}x${nextHeight}`); resetHistory(); bumpDocument(false); setDocumentDirty(false); setNewCanvasOpen(false); setAutoFitRequest((value) => value + 1); setToast(`Created a ${nextWidth} × ${nextHeight} at ${displayResolution(nextDpi)} DPI canvas. Its parameters are now locked.`);
+    const layer = createLayer(nextWidth, nextHeight, 'Layer 1'); layersRef.current = [layer]; setWidth(nextWidth); setHeight(nextHeight); setDpi(nextDpi); setActiveLayerId(layer.id); setSelectedLayerIds([layer.id]); setCenterX(nextWidth / 2); setCenterY(nextHeight / 2); setCursor({ x: 0, y: 0 }); setSelection(null); setBinaryClipboard(null); setPastePreview(null); setMovePreview(null); setExportBaseName(`binary-mask-${nextWidth}x${nextHeight}`); resetHistory(); bumpDocument(false); setDocumentDirty(false); setNewCanvasOpen(false); setAutoFitRequest((value) => value + 1); setToast(`Created a ${nextWidth} × ${nextHeight} at ${nextDpi.toFixed(2)} DPI. Canvas parameters are now locked.`);
   };
   const exportPng = () => void withProcessing('Exporting PNG', async () => { try { downloadBlob(await encodeOneBitPng(composite, width, height, dpi), `${safeExportBaseName}.png`); setToast('Exported a strictly binary 1-bit PNG.'); } catch { setToast('This browser does not support 1-bit PNG encoding.'); } });
   const exportMatrix = (format: 'csv' | 'txt') => void withProcessing(`Exporting ${format.toUpperCase()}`, async () => { const separator = format === 'csv' ? ',' : ' '; downloadBlob(new Blob([binaryToText(composite, width, height, separator)], { type: 'text/plain;charset=utf-8' }), `${safeExportBaseName}.${format}`); setToast(`Exported a ${format.toUpperCase()} binary matrix.`); });
@@ -1303,7 +1303,7 @@ export default function Home() {
           <SectionHeading number="01" title="Canvas" />
           <div className="canvas-parameter-stack">
             <div className="field-grid two-columns compact-fields"><label>Width<div className="input-shell"><input type="number" value={width} disabled /><FieldSuffix>px</FieldSuffix></div></label><label>Height<div className="input-shell"><input type="number" value={height} disabled /><FieldSuffix>px</FieldSuffix></div></label></div>
-            <div className="dpi-row"><label>DPI<div className="input-shell"><input type="number" value={displayResolution(dpi)} disabled /></div></label><button type="button" onClick={() => { setNewWidth(width); setNewHeight(height); setNewDpi(dpi); setNewPixelSideUnit('um'); setNewCanvasOpen(true); }}>New Canvas</button></div>
+            <div className="dpi-row"><label>DPI<div className="input-shell"><input type="text" value={dpi.toFixed(2)} disabled /></div></label><button type="button" onClick={() => { setNewWidth(width); setNewHeight(height); setNewDpi(dpi); setNewPixelSideUnit('um'); setNewCanvasOpen(true); }}>New Canvas</button></div>
             <div className="physical-size"><span>Physical size</span><strong>{physicalWidth} × {physicalHeight} mm</strong></div>
           </div>
           </section>
@@ -1404,7 +1404,7 @@ export default function Home() {
               <label className="resolution-choice"><input type="radio" name="canvas-resolution" checked={newResolutionMode === 'dpi'} onChange={() => setNewResolutionMode('dpi')} />DPI</label>
               <div className="input-shell">
                 {newResolutionMode === 'dpi'
-                  ? <NumericInput aria-label="DPI value" className="number-input" min={MIN_DPI} max={MAX_DPI} strictRange value={displayedNewDpi} onValueChange={(value) => { if (value !== displayedNewDpi) setNewDpi(value); }} />
+                  ? <NumericInput aria-label="DPI value" className="number-input" min={MIN_DPI} max={MAX_DPI} strictRange decimalPlaces={2} value={Number(displayedNewDpi)} onValueChange={(value) => { if (value !== Number(displayedNewDpi)) setNewDpi(Number(value.toFixed(2))); }} />
                   : <input aria-label="DPI value" className="number-input" value={displayedNewDpi} readOnly />}
                 <FieldSuffix>DPI</FieldSuffix>
               </div>

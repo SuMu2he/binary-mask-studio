@@ -8,6 +8,7 @@ type NumericInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | '
   onValueChange: (value: number) => void;
   suffix?: string;
   strictRange?: boolean;
+  decimalPlaces?: number;
 };
 
 const invalidMessage = 'Enter a valid number or arithmetic expression. Division by zero is not allowed.';
@@ -24,9 +25,10 @@ export function validateNumericInputs(scope: HTMLElement | null): boolean {
   return true;
 }
 
-export default function NumericInput({ value, onValueChange, suffix = '', min, max, step = 1, strictRange = false, ...props }: NumericInputProps) {
+export default function NumericInput({ value, onValueChange, suffix = '', min, max, step = 1, strictRange = false, decimalPlaces, ...props }: NumericInputProps) {
   const [draft, setDraft] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const displayValue = `${decimalPlaces === undefined ? value : value.toFixed(decimalPlaces)}${suffix}`;
   const parse = (text: string) => evaluateNumericExpression(suffix && text.trimEnd().endsWith(suffix) ? text.trimEnd().slice(0, -suffix.length) : text);
   const normalize = (next: number) => Math.max(min === undefined ? -Infinity : Number(min), Math.min(max === undefined ? Infinity : Number(max), next));
   const update = (text: string, input: HTMLInputElement, commit: boolean) => {
@@ -39,7 +41,7 @@ export default function NumericInput({ value, onValueChange, suffix = '', min, m
     return !message;
   };
 
-  return <input {...props} type="text" data-numeric-input="" value={draft ?? `${value}${suffix}`} aria-invalid={Boolean(error) || undefined}
+  return <input {...props} type="text" data-numeric-input="" value={draft ?? displayValue} aria-invalid={Boolean(error) || undefined}
     title={error || (props.title ?? 'Supports +, -, *, /, and parentheses. Press Enter or leave the field to show the result.')}
     spellCheck={false} autoComplete="off" maxLength={256}
     onChange={(event) => update(event.target.value, event.currentTarget, false)}
@@ -53,7 +55,7 @@ export default function NumericInput({ value, onValueChange, suffix = '', min, m
       } else if (event.key === 'Escape') {
         event.preventDefault(); event.stopPropagation();
         event.currentTarget.setCustomValidity(''); setError(''); setDraft(null);
-        event.currentTarget.value = `${value}${suffix}`; event.currentTarget.blur();
+        event.currentTarget.value = displayValue; event.currentTarget.blur();
       } else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
         event.preventDefault();
         const increment = step === 'any' ? 1 : Number(step);
