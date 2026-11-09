@@ -41,6 +41,7 @@ type TextRun = { text: string; x: number; baseline: number };
 type TextLayout = { runs: TextRun[]; bounds: Bounds; width: number; height: number };
 type ProjectPayload = {
   format: 'binary-mask-studio'; version: 1; width: number; height: number; dpi: number; activeLayerId: string;
+  pixelSizeUnit?: PixelSideUnit;
   layers: Array<{ id: string; name: string; visible: boolean; locked: boolean; pixels: string }>;
 };
 
@@ -625,6 +626,7 @@ export default function Home() {
   const [width, setWidth] = useState(DEFAULT_WIDTH);
   const [height, setHeight] = useState(DEFAULT_HEIGHT);
   const [dpi, setDpi] = useState(DEFAULT_DPI);
+  const [canvasPixelSizeUnit, setCanvasPixelSizeUnit] = useState<PixelSideUnit | null>(null);
   const [docVersion, setDocVersion] = useState(1);
   const [historyVersion, setHistoryVersion] = useState(0);
   const [activeLayerId, setActiveLayerId] = useState(initialLayerRef.current.id);
@@ -709,6 +711,9 @@ export default function Home() {
   const currentValue = composite[cursor.y * width + cursor.x] ?? 0;
   const physicalWidth = ((width / dpi) * 25.4).toFixed(2);
   const physicalHeight = ((height / dpi) * 25.4).toFixed(2);
+  const canvasResolutionLabel = canvasPixelSizeUnit ? 'Pixel size' : 'DPI';
+  const canvasResolutionValue = canvasPixelSizeUnit ? displayResolution(PIXEL_SIDE_UNITS_PER_INCH[canvasPixelSizeUnit] / dpi) : dpi.toFixed(2);
+  const canvasResolutionUnit = canvasPixelSizeUnit === 'um' ? 'μm' : canvasPixelSizeUnit ?? 'DPI';
   const unitsPerInch = PIXEL_SIDE_UNITS_PER_INCH[newPixelSideUnit];
   const minPixelSide = unitsPerInch / MAX_DPI;
   const maxPixelSide = unitsPerInch / MIN_DPI;
@@ -1201,7 +1206,7 @@ export default function Home() {
   };
   const safeExportBaseName = (exportBaseName.trim().replace(/\.(png|csv|txt|bmask)$/i, '').replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-').replace(/[. ]+$/g, '') || `binary-mask-${width}x${height}`);
   const saveProject = () => void withProcessing('Saving project', async () => {
-    const payload: ProjectPayload = { format: 'binary-mask-studio', version: 1, width, height, dpi, activeLayerId, layers: layersRef.current.map((layer) => ({ id: layer.id, name: layer.name, visible: layer.visible, locked: layer.locked, pixels: bytesToBase64(layer.pixels) })) };
+    const payload: ProjectPayload = { format: 'binary-mask-studio', version: 1, width, height, dpi, pixelSizeUnit: canvasPixelSizeUnit ?? undefined, activeLayerId, layers: layersRef.current.map((layer) => ({ id: layer.id, name: layer.name, visible: layer.visible, locked: layer.locked, pixels: bytesToBase64(layer.pixels) })) };
     downloadBlob(new Blob([JSON.stringify(payload)], { type: 'application/json' }), `${safeExportBaseName}.bmask`); setDocumentDirty(false); setToast('The layered project has been saved as a .bmask file.');
   });
   const openProject = async (file: File) => {
@@ -1214,6 +1219,7 @@ export default function Home() {
       const expectedLength = payload.width * payload.height;
       const layers = payload.layers.map((item, index) => { const pixels = base64ToBytes(item.pixels); if (pixels.length !== expectedLength || pixels.some((value) => value > OPAQUE_ONE)) throw new Error(`Layer ${index + 1} has corrupted data.`); return { id: item.id || makeId(), name: item.name || `Layer ${index + 1}`, visible: Boolean(item.visible), locked: Boolean(item.locked), pixels }; });
       layersRef.current = layers; setWidth(payload.width); setHeight(payload.height); setDpi(payload.dpi);
+      setCanvasPixelSizeUnit(payload.pixelSizeUnit === 'um' || payload.pixelSizeUnit === 'mm' ? payload.pixelSizeUnit : null);
       const nextActive = layers.some((layer) => layer.id === payload.activeLayerId) ? payload.activeLayerId : layers[0].id;
       setActiveLayerId(nextActive); setSelectedLayerIds([nextActive]); setCenterX(payload.width / 2); setCenterY(payload.height / 2); setCursor({ x: 0, y: 0 }); setSelection(null); setPastePreview(null); setMovePreview(null); setExportBaseName(file.name.replace(/\.bmask$/i, '') || `binary-mask-${payload.width}x${payload.height}`); resetHistory(); bumpDocument(false); setDocumentDirty(false); setAutoFitRequest((value) => value + 1); setToast('Opened the .bmask layered project.');
     } catch (error) { setToast(error instanceof Error ? error.message : 'Could not open the project file.'); }
@@ -1224,7 +1230,8 @@ export default function Home() {
     if (nextWidth < 1 || nextHeight < 1 || nextWidth > MAX_DIMENSION || nextHeight > MAX_DIMENSION) { setToast(`Width and height must be between 1 and ${MAX_DIMENSION}.`); return; }
     if (!isSupportedDpi(nextDpi)) { setToast('The canvas resolution is outside the supported range.'); return; }
     if (dirtyRef.current && !window.confirm('This project has unsaved changes. Create a new canvas and discard them?')) return;
-    const layer = createLayer(nextWidth, nextHeight, 'Layer 1'); layersRef.current = [layer]; setWidth(nextWidth); setHeight(nextHeight); setDpi(nextDpi); setActiveLayerId(layer.id); setSelectedLayerIds([layer.id]); setCenterX(nextWidth / 2); setCenterY(nextHeight / 2); setCursor({ x: 0, y: 0 }); setSelection(null); setBinaryClipboard(null); setPastePreview(null); setMovePreview(null); setExportBaseName(`binary-mask-${nextWidth}x${nextHeight}`); resetHistory(); bumpDocument(false); setDocumentDirty(false); setNewCanvasOpen(false); setAutoFitRequest((value) => value + 1); setToast(`Created a ${nextWidth} × ${nextHeight} at ${nextDpi.toFixed(2)} DPI. Canvas parameters are now locked.`);
+    setCanvasPixelSizeUnit(newResolutionMode === 'pixel' ? newPixelSideUnit : null);
+    const layer = createLayer(nextWidth, nextHeight, 'Layer 1'); layersRef.current = [layer]; setWidth(nextWidth); setHeight(nextHeight); setDpi(nextDpi); setActiveLayerId(layer.id); setSelectedLayerIds([layer.id]); setCenterX(nextWidth / 2); setCenterY(nextHeight / 2); setCursor({ x: 0, y: 0 }); setSelection(null); setBinaryClipboard(null); setPastePreview(null); setMovePreview(null); setExportBaseName(`binary-mask-${nextWidth}x${nextHeight}`); resetHistory(); bumpDocument(false); setDocumentDirty(false); setNewCanvasOpen(false); setAutoFitRequest((value) => value + 1); setToast(`Created a ${nextWidth} × ${nextHeight} canvas. Its parameters are now locked.`);
   };
   const exportPng = () => void withProcessing('Exporting PNG', async () => { try { downloadBlob(await encodeOneBitPng(composite, width, height, dpi), `${safeExportBaseName}.png`); setToast('Exported a strictly binary 1-bit PNG.'); } catch { setToast('This browser does not support 1-bit PNG encoding.'); } });
   const exportMatrix = (format: 'csv' | 'txt') => void withProcessing(`Exporting ${format.toUpperCase()}`, async () => { const separator = format === 'csv' ? ',' : ' '; downloadBlob(new Blob([binaryToText(composite, width, height, separator)], { type: 'text/plain;charset=utf-8' }), `${safeExportBaseName}.${format}`); setToast(`Exported a ${format.toUpperCase()} binary matrix.`); });
@@ -1303,7 +1310,7 @@ export default function Home() {
           <SectionHeading number="01" title="Canvas" />
           <div className="canvas-parameter-stack">
             <div className="field-grid two-columns compact-fields"><label>Width<div className="input-shell"><input type="number" value={width} disabled /><FieldSuffix>px</FieldSuffix></div></label><label>Height<div className="input-shell"><input type="number" value={height} disabled /><FieldSuffix>px</FieldSuffix></div></label></div>
-            <div className="dpi-row"><label>DPI<div className="input-shell"><input type="text" value={dpi.toFixed(2)} disabled /></div></label><button type="button" onClick={() => { setNewWidth(width); setNewHeight(height); setNewDpi(dpi); setNewPixelSideUnit('um'); setNewCanvasOpen(true); }}>New Canvas</button></div>
+            <div className="dpi-row"><label>{canvasResolutionLabel}<div className="input-shell"><input type="text" value={canvasResolutionValue} disabled /><FieldSuffix>{canvasResolutionUnit}</FieldSuffix></div></label><button type="button" onClick={() => { setNewWidth(width); setNewHeight(height); setNewDpi(dpi); setNewPixelSideUnit('um'); setNewCanvasOpen(true); }}>New Canvas</button></div>
             <div className="physical-size"><span>Physical size</span><strong>{physicalWidth} × {physicalHeight} mm</strong></div>
           </div>
           </section>
