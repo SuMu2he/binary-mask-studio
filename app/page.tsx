@@ -267,24 +267,31 @@ function isGratingLine(localX: number, spec: GratingSpec) {
   return wrapped >= -halfLineWidth && wrapped < halfLineWidth;
 }
 
+function sampleGratingPixel(x: number, y: number, spec: GratingSpec) {
+  const local = worldToLocal(x + 0.5, y + 0.5, spec);
+  if (Math.abs(local.x) > spec.width / 2 || Math.abs(local.y) > spec.height / 2) return null;
+  return isGratingLine(local.x, spec);
+}
+
+function gratingWriteValue(line: boolean, mode: GratingWriteMode, polarity: GratingPolarity, operation: BooleanOperation, previous: number) {
+  if (mode === 'cover') return line === (polarity === 'line1') ? OPAQUE_ONE : OPAQUE_ZERO;
+  if (!line) return null;
+  if (operation === 'set1') return OPAQUE_ONE;
+  if (operation === 'set0') return OPAQUE_ZERO;
+  return previous === OPAQUE_ONE ? OPAQUE_ZERO : OPAQUE_ONE;
+}
+
 function writeGrating(pixels: Uint8Array, width: number, height: number, spec: GratingSpec, mode: GratingWriteMode, polarity: GratingPolarity, operation: BooleanOperation) {
   const range = pixelBounds(gratingBounds(spec), width, height);
   if (!range.hasIntersection || spec.width <= 0 || spec.height <= 0 || spec.period <= 0) return 0;
   let touched = 0;
   for (let y = range.minY; y <= range.maxY; y += 1) for (let x = range.minX; x <= range.maxX; x += 1) {
-    const local = worldToLocal(x + 0.5, y + 0.5, spec);
-    if (Math.abs(local.x) > spec.width / 2 || Math.abs(local.y) > spec.height / 2) continue;
-    const line = isGratingLine(local.x, spec);
+    const line = sampleGratingPixel(x, y, spec);
+    if (line === null) continue;
     const index = y * width + x;
-    if (mode === 'cover') {
-      const valueIsOne = polarity === 'line1' ? line : !line;
-      pixels[index] = valueIsOne ? OPAQUE_ONE : OPAQUE_ZERO;
-    } else {
-      if (!line) continue;
-      if (operation === 'set1') pixels[index] = OPAQUE_ONE;
-      else if (operation === 'set0') pixels[index] = OPAQUE_ZERO;
-      else pixels[index] = pixels[index] === OPAQUE_ONE ? OPAQUE_ZERO : OPAQUE_ONE;
-    }
+    const value = gratingWriteValue(line, mode, polarity, operation, pixels[index]);
+    if (value === null) continue;
+    pixels[index] = value;
     touched += 1;
   }
   return touched;
@@ -644,6 +651,7 @@ export default function Home() {
   const [rotation, setRotation] = useState(0);
   const [operation, setOperation] = useState<BooleanOperation>('set1');
   const [cursor, setCursor] = useState<Point>({ x: 0, y: 0 });
+  const [pointerInCanvas, setPointerInCanvas] = useState(false);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [selectionDraft, setSelectionDraft] = useState<Selection | null>(null);
   const [binaryClipboard, setBinaryClipboard] = useState<BinaryBlock | null>(null);
@@ -703,6 +711,17 @@ export default function Home() {
   const geometryBounds = useMemo(() => shapeBounds(shapeSpec), [shapeSpec]);
   const bounds = useMemo(() => shape === 'text' ? measureTextBounds(textSpec) : shape === 'grating' ? gratingBounds(gratingSpec) : geometryBounds, [geometryBounds, gratingSpec, shape, textSpec]);
   const hasParametricContent = shape === 'text' ? Boolean(textContent.trim()) : shape === 'grating' ? gratingWidthPixels > 0 && gratingHeightPixels > 0 && gratingPeriodPixels > 0 : true;
+  const showGratingPreview = tool === 'shape' && shape === 'grating' && hasParametricContent;
+  let gratingPreviewReadout = 'Hover over the grating';
+  if (showGratingPreview && pointerInCanvas) {
+    const line = sampleGratingPixel(cursor.x, cursor.y, gratingSpec);
+    if (line === null) gratingPreviewReadout = 'Outside grating';
+    else {
+      const value = gratingWriteValue(line, gratingWriteMode, gratingPolarity, operation, activeLayer.pixels[cursor.y * width + cursor.x]);
+      const label = value === OPAQUE_ONE ? 'White 1' : value === OPAQUE_ZERO ? 'Black 0' : 'Unchanged';
+      gratingPreviewReadout = `${line ? 'Line' : 'Gap'} · ${label}`;
+    }
+  }
   const gratingAliased = shape === 'grating' && gratingPeriodPixels < 2;
   const gratingCycleCount = gratingPeriodPixels > 0 ? gratingWidthPixels / gratingPeriodPixels : 0;
   const clippedRange = useMemo(() => pixelBounds(bounds, width, height), [bounds, height, width]);
@@ -1327,7 +1346,7 @@ export default function Home() {
           </div>
           <div ref={stageRef} className={`stage ${spacePressed ? 'pan-ready' : ''} ${panRef.current ? 'panning' : ''}`} onWheel={handleWheel}><div className="stage-inner" style={{ minWidth: `${displayWidth + 112}px`, minHeight: `${displayHeight + 104}px` }}><div className="canvas-shell" style={{ width: `${displayWidth}px`, height: `${displayHeight}px`, '--grid-size': `${Math.max(8, 24 * (zoom / 100))}px` } as CSSProperties}>
             <div className="ruler ruler-x"><span /><span>{width / 2}</span><span>{width}</span></div><div className="ruler ruler-y"><span /><span>{height / 2}</span><span>{height}</span></div>
-            <div ref={canvasFrameRef} className="canvas-frame"><canvas ref={canvasRef} aria-label="Binary image canvas" /><canvas ref={overlayRef} className={`drawing-layer tool-${tool}`} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={stopPointerAction} onPointerCancel={stopPointerAction} onDoubleClick={(event) => { if (event.button !== 0) return; if (pastePreview) { event.preventDefault(); confirmPaste(); } else if (movePreview) { event.preventDefault(); confirmMove(); } }} aria-label="Drawing interaction layer" /><span className="axis axis-x" /><span className="axis axis-y" /><span className="origin-dot" /><span className="origin-label">(0, 0)</span></div>
+            <div ref={canvasFrameRef} className="canvas-frame"><canvas ref={canvasRef} aria-label="Binary image canvas" /><canvas ref={overlayRef} className={`drawing-layer tool-${tool}`} onPointerEnter={(event) => { setCursor(pointerToPixel(event)); setPointerInCanvas(true); }} onPointerLeave={() => setPointerInCanvas(false)} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={stopPointerAction} onPointerCancel={stopPointerAction} onDoubleClick={(event) => { if (event.button !== 0) return; if (pastePreview) { event.preventDefault(); confirmPaste(); } else if (movePreview) { event.preventDefault(); confirmMove(); } }} aria-label="Drawing interaction layer" /><span className="axis axis-x" /><span className="axis axis-y" /><span className="origin-dot" /><span className="origin-label">(0, 0)</span></div>
           </div></div></div>
         </section>
 
@@ -1349,7 +1368,7 @@ export default function Home() {
           </section>
           <PanelSplitter orientation="horizontal" label="Resize Layers and Pixel Inspector" controls="layers-panel pixel-inspector" {...layout.layers} />
           <section className="panel inspector-panel" id="pixel-inspector"><SectionHeading number="04" title="Pixel Inspector" />
-            <div className="coordinate-card"><small>Current pixel · Top-left origin</small><div><span>X</span><strong>{cursor.x}</strong><span>Y</span><strong>{cursor.y}</strong></div><p>Pixel value <b>{currentValue}</b></p></div>
+            <div className="coordinate-card"><small>Current pixel · Top-left origin</small><div><span>X</span><strong>{cursor.x}</strong><span>Y</span><strong>{cursor.y}</strong></div><p>Pixel value <b>{currentValue}</b></p>{showGratingPreview && <p>Grating preview (current layer) <b>{gratingPreviewReadout}</b></p>}</div>
             <div className="metric-list"><div><span>White pixels</span><strong>{whitePixels.toLocaleString('en-US')} ({((whitePixels / (width * height)) * 100).toFixed(4)}%)</strong></div><div><span>Total pixels</span><strong>{(width * height).toLocaleString('en-US')}</strong></div></div>
             <label className="export-name">Export file name<input value={exportBaseName} onChange={(event) => setExportBaseName(event.target.value)} onBlur={() => setExportBaseName(safeExportBaseName)} /></label>
             <div className="download-row"><button type="button" disabled={Boolean(processing)} onClick={exportPng}>Export PNG</button><button type="button" disabled={Boolean(processing)} onClick={() => exportMatrix('csv')}>Export CSV</button><button type="button" disabled={Boolean(processing)} onClick={() => exportMatrix('txt')}>Export TXT</button></div>
