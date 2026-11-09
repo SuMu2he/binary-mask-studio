@@ -712,7 +712,9 @@ export default function Home() {
   const physicalWidth = ((width / dpi) * 25.4).toFixed(2);
   const physicalHeight = ((height / dpi) * 25.4).toFixed(2);
   const canvasResolutionLabel = canvasPixelSizeUnit ? 'Pixel size' : 'DPI';
-  const canvasResolutionValue = canvasPixelSizeUnit ? displayResolution(PIXEL_SIDE_UNITS_PER_INCH[canvasPixelSizeUnit] / dpi) : dpi.toFixed(2);
+  const canvasPixelSize = canvasPixelSizeUnit ? displayResolution(PIXEL_SIDE_UNITS_PER_INCH[canvasPixelSizeUnit] / dpi) : null;
+  const canvasResolutionValue = canvasPixelSize === null ? dpi.toFixed(2)
+    : canvasPixelSize < 0.01 ? canvasPixelSize.toExponential(2) : canvasPixelSize.toFixed(2);
   const canvasResolutionUnit = canvasPixelSizeUnit === 'um' ? 'μm' : canvasPixelSizeUnit ?? 'DPI';
   const unitsPerInch = PIXEL_SIDE_UNITS_PER_INCH[newPixelSideUnit];
   const minPixelSide = unitsPerInch / MAX_DPI;
