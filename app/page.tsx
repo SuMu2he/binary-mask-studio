@@ -440,13 +440,13 @@ function layerToText(pixels: Uint8Array, width: number, height: number) {
   return rows.join('\n');
 }
 
-function compositeToText({ pixels, resolved }: ReturnType<typeof compositeLayers>, width: number, height: number, separator: string) {
+function compositeToText({ pixels, resolved }: ReturnType<typeof compositeLayers>, width: number, height: number, separator: string, preserveTransparency: boolean) {
   const rows: string[] = [];
   for (let y = 0; y < height; y += 1) {
     const values = new Array<string>(width);
     for (let x = 0; x < width; x += 1) {
       const index = y * width + x;
-      values[x] = resolved[index] ? (pixels[index] ? '1' : '0') : 'null';
+      values[x] = preserveTransparency && !resolved[index] ? 'null' : pixels[index] ? '1' : '0';
     }
     rows.push(values.join(separator));
   }
@@ -498,8 +498,8 @@ function pngChunk(type: string, data: Uint8Array) {
   return concatBytes([uint32(data.length), typeBytes, data, uint32(crc32(concatBytes([typeBytes, data])))]);
 }
 
-async function encodeMaskPng({ pixels, resolved }: ReturnType<typeof compositeLayers>, width: number, height: number, dpi: number) {
-  const hasTransparency = resolved.includes(0);
+async function encodeMaskPng({ pixels, resolved }: ReturnType<typeof compositeLayers>, width: number, height: number, dpi: number, preserveTransparency: boolean) {
+  const hasTransparency = preserveTransparency && resolved.includes(0);
   const bitDepth = hasTransparency ? 2 : 1;
   const samplesPerByte = 8 / bitDepth;
   const rowBytes = Math.ceil(width / samplesPerByte);
@@ -712,6 +712,7 @@ export default function Home() {
   const [spacePressed, setSpacePressed] = useState(false);
   const [processing, setProcessing] = useState('');
   const [exportBaseName, setExportBaseName] = useState(`binary-mask-${DEFAULT_WIDTH}x${DEFAULT_HEIGHT}`);
+  const [exportTransparency, setExportTransparency] = useState(true);
   const [toast, setToast] = useState('Ready with a blank 1920 × 1080 canvas. Start editing or create a new canvas.');
 
   const setDocumentDirty = (value: boolean) => { dirtyRef.current = value; setDirty(value); };
@@ -1251,13 +1252,13 @@ export default function Home() {
   };
   const exportPng = () => void withProcessing('Exporting PNG', async () => {
     try {
-      downloadBlob(await encodeMaskPng(compositeData, width, height, dpi), `${safeExportBaseName}.png`);
+      downloadBlob(await encodeMaskPng(compositeData, width, height, dpi, exportTransparency), `${safeExportBaseName}.png`);
       setToast('Exported the mask as PNG.');
     } catch { setToast('This browser could not encode the mask as PNG.'); }
   });
   const exportMatrix = (format: 'csv' | 'txt') => void withProcessing(`Exporting ${format.toUpperCase()}`, async () => {
     const separator = format === 'csv' ? ',' : ' ';
-    downloadBlob(new Blob([compositeToText(compositeData, width, height, separator)], { type: 'text/plain;charset=utf-8' }), `${safeExportBaseName}.${format}`);
+    downloadBlob(new Blob([compositeToText(compositeData, width, height, separator, exportTransparency)], { type: 'text/plain;charset=utf-8' }), `${safeExportBaseName}.${format}`);
     setToast(`Exported a ${format.toUpperCase()} mask matrix.`);
   });
   const changeUnit = (nextUnit: SizeUnit) => { if (nextUnit === sizeUnit) return; const convert = (value: number) => fromPixels(toPixels(value, sizeUnit, dpi), nextUnit, dpi); setDimensionX(convert(dimensionX)); setDimensionY(convert(dimensionY)); setTriangleBase(convert(triangleBase)); setTriangleHeight(convert(triangleHeight)); setTriangleProjection(convert(triangleProjection)); setTextFontSize(convert(textFontSize)); setTextLetterSpacing(convert(textLetterSpacing)); setGratingWidth(convert(gratingWidth)); setGratingHeight(convert(gratingHeight)); setGratingPeriod(convert(gratingPeriod)); setGratingPhase(convert(gratingPhase)); setSizeUnit(nextUnit); };
@@ -1421,6 +1422,11 @@ export default function Home() {
             <div className="coordinate-card"><small>Current pixel · Top-left origin</small><div><span>X</span><strong>{cursor.x}</strong><span>Y</span><strong>{cursor.y}</strong></div><p>Pixel value <b>{currentValue}</b></p>{showGratingPreview && <p>Grating preview (current layer) <b>{gratingPreviewReadout}</b></p>}</div>
             <div className="metric-list"><div><span>White pixels</span><strong>{whitePixels.toLocaleString('en-US')} ({((whitePixels / (width * height)) * 100).toFixed(4)}%)</strong></div><div><span>Total pixels</span><strong>{(width * height).toLocaleString('en-US')}</strong></div></div>
             <label className="export-name">Export file name<input value={exportBaseName} onChange={(event) => setExportBaseName(event.target.value)} onBlur={() => setExportBaseName(safeExportBaseName)} /></label>
+            <div className="export-transparency">
+              <label><input type="checkbox" checked={exportTransparency} onChange={(event) => setExportTransparency(event.target.checked)}
+                aria-describedby={exportTransparency ? undefined : 'export-transparency-warning'} />Export transparency</label>
+              {!exportTransparency && <span id="export-transparency-warning" className="export-transparency-warning" role="status">Transparent pixels export as black (0).</span>}
+            </div>
             <div className="download-row"><button type="button" disabled={Boolean(processing)} onClick={exportPng}>Export PNG</button><button type="button" disabled={Boolean(processing)} onClick={() => exportMatrix('csv')}>Export CSV</button><button type="button" disabled={Boolean(processing)} onClick={() => exportMatrix('txt')}>Export TXT</button></div>
           </section>
         </aside>
