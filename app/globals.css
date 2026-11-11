@@ -286,7 +286,9 @@ input:disabled { background: #eef1ed; color: #737e78; -webkit-text-fill-color: #
 .text-matrix-editor > button { justify-self: start; padding: 0 12px; }
 .text-matrix-editor textarea { min-height: 250px; resize: none; padding: 15px; background: #101d18; color: #dfffa0; font: 500 12px/1.65 ui-monospace, monospace; white-space: pre; }
 
-.help-dialog { width: min(980px, 100%); padding: 0; overflow: hidden; }
+.help-dialog { width: min(980px, 100%); max-height: calc(100dvh - 48px); display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+.help-dialog > .modal-header, .help-dialog > .help-quote { flex: none; }
+.help-scroll { min-height: 0; overflow: auto; overscroll-behavior: contain; scroll-behavior: smooth; }
 .help-dialog > .modal-header, .about-dialog > .modal-header { padding: 20px 22px 16px; border-bottom: 1px solid var(--line); }
 .help-quickstart { margin: 18px 22px 12px; padding: 15px 17px; border-radius: 10px; background: var(--ink); color: white; }
 .help-quickstart > strong { color: var(--accent); font-size: 16px; }
@@ -296,7 +298,7 @@ input:disabled { background: #eef1ed; color: #737e78; -webkit-text-fill-color: #
 .help-nav { display: flex; gap: 5px; margin: 0 22px 12px; overflow-x: auto; scrollbar-width: thin; }
 .help-nav a { flex: 0 0 auto; padding: 6px 9px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 13px; font-weight: 750; text-decoration: none; }
 .help-nav a:hover { border-color: var(--accent-dark); color: var(--ink); }
-.help-content { max-height: min(54vh, 560px); padding: 2px 22px 18px; overflow: auto; scroll-behavior: smooth; }
+.help-content { padding: 2px 22px 18px; }
 .help-content section { padding: 13px 0; border-top: 1px solid var(--line); scroll-margin-top: 6px; }
 .help-content h3 { margin: 0 0 8px; color: var(--ink); font-size: 16px; }
 .help-content p { margin: 6px 0; color: var(--muted); font-size: 14px; line-height: 1.75; }
@@ -307,6 +309,10 @@ input:disabled { background: #eef1ed; color: #737e78; -webkit-text-fill-color: #
 .help-quote { display: flex; justify-content: center; align-items: baseline; gap: 9px; padding: 12px 22px 15px; border-top: 1px solid var(--line); color: var(--ink); font-size: 14px; }
 .help-quote span, .help-quote small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .help-quote small { flex: 0 0 auto; color: var(--muted); font-size: 13px; }
+@media (max-width: 600px) {
+  .help-quote { flex-wrap: wrap; gap: 2px 8px; text-align: center; }
+  .help-quote span, .help-quote small { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+}
 
 .about-dialog { width: min(470px, 100%); padding: 0; overflow: hidden; text-align: center; }
 .about-dialog .modal-header { text-align: left; }

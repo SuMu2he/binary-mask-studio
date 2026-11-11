@@ -52,7 +52,7 @@ Move relocates only the selected transparent/0/1 content in the current layer an
 
 Every layer matches the canvas dimensions. The New menu creates a transparent layer, a full-canvas black 0 layer, or a full-canvas white 1 layer. A new layer is inserted above the current layer and becomes current, with creation recorded as one undo step. Layers support selection, visibility, locking, duplication, deletion, renaming, and drag reordering. Use the arrows on the right of each layer to move it up or down, or drag the three horizontal lines between them. The red circled cross between the lock button and drag handle deletes that layer. Duplicate immediately creates a copy. Shift selects a range; Ctrl toggles individual layers. Double-click a layer name to rename it.
 
-The topmost nontransparent pixel determines the final visible result. Merge Selected creates a new layer using priority 1 over 0 over transparent at each pixel. Invert and Clear affect only the current layer. Clear All Layers asks for confirmation and requires all affected layers to be unlocked.
+The topmost nontransparent pixel determines the final visible result. Merge combines the selected layers into a new layer using priority 1 over 0 over transparent at each pixel. Invert and Clear affect only the current layer. Clear All Layers asks for confirmation and requires all affected layers to be unlocked.
 
 ## 6. Matrix Editing | Matrix
 

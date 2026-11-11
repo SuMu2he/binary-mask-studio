@@ -87,11 +87,13 @@ export default function HelpDialog({ onClose, quote }: { onClose: () => void; qu
   return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <section className="dialog-card help-dialog" role="dialog" aria-modal="true" aria-labelledby="help-title">
       <div className="modal-header"><div><small>{document?.subtitle ?? 'QUICK START & COMPLETE MANUAL'}</small><h2 id="help-title">{document?.title ?? 'Help & User Guide'}</h2></div><button type="button" aria-label="Close help" onClick={onClose}>×</button></div>
-      {document ? <>
-        {quickstart && <div className="help-quickstart"><strong>{quickstart.title}</strong><HelpBlocks blocks={quickstart.blocks} /></div>}
-        <nav className="help-nav" aria-label="Guide sections">{sections.map((section, index) => <a href={`#help-section-${index + 1}`} key={index}>{section.label}</a>)}</nav>
-        <div className="help-content">{sections.map((section, index) => <section id={`help-section-${index + 1}`} key={index}><h3>{section.title}</h3><HelpBlocks blocks={section.blocks} /></section>)}</div>
-      </> : <div className="help-content"><p role={failed ? 'alert' : 'status'}>{failed ? 'Help could not be loaded. Close this window and try again.' : 'Loading help…'}</p></div>}
+      <div className="help-scroll">
+        {document ? <>
+          {quickstart && <div className="help-quickstart"><strong>{quickstart.title}</strong><HelpBlocks blocks={quickstart.blocks} /></div>}
+          <nav className="help-nav" aria-label="Guide sections">{sections.map((section, index) => <a href={`#help-section-${index + 1}`} key={index}>{section.label}</a>)}</nav>
+          <div className="help-content">{sections.map((section, index) => <section id={`help-section-${index + 1}`} key={index}><h3>{section.title}</h3><HelpBlocks blocks={section.blocks} /></section>)}</div>
+        </> : <div className="help-content"><p role={failed ? 'alert' : 'status'}>{failed ? 'Help could not be loaded. Close this window and try again.' : 'Loading help…'}</p></div>}
+      </div>
       {document && <div className="help-quote"><span>{quote.content}</span><small>{quote.source}</small></div>}
     </section>
   </div>;
